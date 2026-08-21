@@ -12,14 +12,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,11 +44,20 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+data class Project(
+    val name: String,
+    val type: String
+)
+
 @Composable
 fun LocoEngineApp() {
 
     var showCreateProject by remember {
         mutableStateOf(false)
+    }
+
+    val projects = remember {
+        mutableStateListOf<Project>()
     }
 
     MaterialTheme {
@@ -55,9 +68,12 @@ fun LocoEngineApp() {
                 .background(Color(0xFF0F172A))
                 .padding(24.dp),
 
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+
+            Spacer(
+                modifier = Modifier.height(40.dp)
+            )
 
             Text(
                 text = "LOCO ENGINE",
@@ -66,7 +82,7 @@ fun LocoEngineApp() {
             )
 
             Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier = Modifier.height(8.dp)
             )
 
             Text(
@@ -76,7 +92,7 @@ fun LocoEngineApp() {
             )
 
             Spacer(
-                modifier = Modifier.height(32.dp)
+                modifier = Modifier.height(30.dp)
             )
 
             Button(
@@ -86,12 +102,59 @@ fun LocoEngineApp() {
             ) {
                 Text("CREATE PROJECT")
             }
+
+            Spacer(
+                modifier = Modifier.height(30.dp)
+            )
+
+            Text(
+                text = "PROJECTS",
+                color = Color(0xFF00E5FF),
+                fontSize = 20.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            if (projects.isEmpty()) {
+
+                Text(
+                    text = "No projects yet",
+                    color = Color.Gray,
+                    fontSize = 16.sp
+                )
+
+            } else {
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+
+                    items(projects) { project ->
+
+                        ProjectCard(project)
+                    }
+                }
+            }
         }
 
         if (showCreateProject) {
 
             CreateProjectDialog(
                 onDismiss = {
+                    showCreateProject = false
+                },
+
+                onCreate = { name, type ->
+
+                    projects.add(
+                        Project(
+                            name = name,
+                            type = type
+                        )
+                    )
+
                     showCreateProject = false
                 }
             )
@@ -100,8 +163,53 @@ fun LocoEngineApp() {
 }
 
 @Composable
+fun ProjectCard(
+    project: Project
+) {
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+
+            Text(
+                text = project.name,
+                fontSize = 20.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(6.dp)
+            )
+
+            Text(
+                text = "Type: ${project.type}",
+                fontSize = 14.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            Button(
+                onClick = {
+                    // سيتم فتح محرر المشروع هنا لاحقًا.
+                }
+            ) {
+                Text("OPEN")
+            }
+        }
+    }
+}
+
+@Composable
 fun CreateProjectDialog(
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onCreate: (String, String) -> Unit
 ) {
 
     var projectName by remember {
@@ -129,10 +237,13 @@ fun CreateProjectDialog(
                     onValueChange = {
                         projectName = it
                     },
+
                     label = {
                         Text("Project Name")
                     },
+
                     singleLine = true,
+
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -149,7 +260,6 @@ fun CreateProjectDialog(
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
 
@@ -171,7 +281,7 @@ fun CreateProjectDialog(
                 }
 
                 Spacer(
-                    modifier = Modifier.height(12.dp)
+                    modifier = Modifier.height(10.dp)
                 )
 
                 Text(
@@ -187,9 +297,10 @@ fun CreateProjectDialog(
 
                     if (projectName.isNotBlank()) {
 
-                        // سيتم إنشاء المشروع فعليًا في الخطوات القادمة.
-
-                        onDismiss()
+                        onCreate(
+                            projectName.trim(),
+                            projectType
+                        )
                     }
                 }
             ) {
