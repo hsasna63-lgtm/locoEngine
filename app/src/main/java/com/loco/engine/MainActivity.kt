@@ -51,7 +51,6 @@ class MainActivity : ComponentActivity() {
         val savedProjects = loadProjects(this)
 
         setContent {
-
             LocoEngineApp(
                 initialProjects = savedProjects,
                 onProjectsChanged = { projects ->
@@ -82,11 +81,9 @@ fun saveProjects(
     context: Context,
     projects: List<Project>
 ) {
-
     val jsonArray = JSONArray()
 
     for (project in projects) {
-
         val jsonObject = JSONObject()
 
         jsonObject.put("name", project.name)
@@ -125,7 +122,6 @@ fun loadProjects(
     return try {
 
         val jsonArray = JSONArray(savedData)
-
         val projects = mutableListOf<Project>()
 
         for (i in 0 until jsonArray.length()) {
@@ -143,7 +139,6 @@ fun loadProjects(
         projects
 
     } catch (e: Exception) {
-
         emptyList()
     }
 }
@@ -252,13 +247,12 @@ fun LocoEngineApp(
 
                     items(
                         items = projects,
-                        key = {
-                            "${it.name}_${it.type}"
+                        key = { project ->
+                            "${project.name}_${project.type}"
                         }
                     ) { project ->
 
                         ProjectCard(
-
                             project = project,
 
                             onOpen = {
@@ -535,7 +529,6 @@ fun EditorScreen(
     val objects = remember {
 
         mutableStateListOf(
-
             SceneObject(
                 id = 1,
                 name = "Main Camera",
@@ -550,12 +543,16 @@ fun EditorScreen(
         )
     }
 
-    var selectedObject by remember {
-        mutableStateOf<SceneObject?>(null)
+    var selectedObjectId by remember {
+        mutableStateOf<Int?>(null)
     }
 
     var currentTool by remember {
         mutableStateOf("SELECT")
+    }
+
+    val selectedObject = objects.firstOrNull {
+        it.id == selectedObjectId
     }
 
     Column(
@@ -688,17 +685,16 @@ fun EditorScreen(
 
                     items(
                         items = objects,
-                        key = {
-                            it.id
-                        }
+                        key = { it.id }
                     ) { obj ->
+
+                        val isSelected =
+                            selectedObjectId == obj.id
 
                         Text(
                             text = obj.name,
 
-                            color = if (
-                                selectedObject?.id == obj.id
-                            ) {
+                            color = if (isSelected) {
                                 Color(0xFF00E5FF)
                             } else {
                                 Color.White
@@ -707,9 +703,7 @@ fun EditorScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-
-                                    selectedObject = obj
-
+                                    selectedObjectId = obj.id
                                 }
                                 .padding(10.dp)
                         )
@@ -795,10 +789,8 @@ fun EditorScreen(
 
                 } else {
 
-                    val obj = selectedObject!!
-
                     Text(
-                        text = obj.name,
+                        text = selectedObject.name,
                         color = Color.White,
                         fontSize = 18.sp
                     )
@@ -808,7 +800,7 @@ fun EditorScreen(
                     )
 
                     Text(
-                        text = "Type: ${obj.type}",
+                        text = "Type: ${selectedObject.type}",
                         color = Color.Gray
                     )
 
@@ -830,14 +822,12 @@ fun EditorScreen(
                     )
 
                     Text(
-                        text = "X: ${obj.x}"
+                        text = "X: ${selectedObject.x}"
                     )
 
                     Text(
-                        text = "Y: ${obj.y}"
+                        text = "Y: ${selectedObject.y}"
                     )
 
                     Text(
-                        text = "Z: ${obj.z}"
-                    )
-                    
+       
