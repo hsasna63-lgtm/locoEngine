@@ -19,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -139,10 +140,26 @@ fun LocoEngineApp(
         mutableStateOf(false)
     }
 
+    var selectedProject by remember {
+        mutableStateOf<Project?>(null)
+    }
+
     val projects = remember {
         mutableStateListOf<Project>().apply {
             addAll(initialProjects)
         }
+    }
+
+    if (selectedProject != null) {
+
+        EditorScreen(
+            project = selectedProject!!,
+            onBack = {
+                selectedProject = null
+            }
+        )
+
+        return
     }
 
     MaterialTheme {
@@ -216,9 +233,30 @@ fun LocoEngineApp(
                     modifier = Modifier.fillMaxWidth()
                 ) {
 
-                    items(projects) { project ->
+                    items(
+                        items = projects,
+                        key = { project ->
+                            "${project.name}_${project.type}"
+                        }
+                    ) { project ->
 
-                        ProjectCard(project)
+                        ProjectCard(
+
+                            project = project,
+
+                            onOpen = {
+                                selectedProject = project
+                            },
+
+                            onDelete = {
+
+                                projects.remove(project)
+
+                                onProjectsChanged(
+                                    projects.toList()
+                                )
+                            }
+                        )
                     }
                 }
             }
@@ -254,8 +292,14 @@ fun LocoEngineApp(
 
 @Composable
 fun ProjectCard(
-    project: Project
+    project: Project,
+    onOpen: () -> Unit,
+    onDelete: () -> Unit
 ) {
+
+    var showDeleteDialog by remember {
+        mutableStateOf(false)
+    }
 
     Card(
         modifier = Modifier
@@ -285,15 +329,70 @@ fun ProjectCard(
                 modifier = Modifier.height(12.dp)
             )
 
-            Button(
-                onClick = {
-                    // سيتم فتح محرر المشروع لاحقًا.
-                }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
-                Text("OPEN")
+                Button(
+                    onClick = onOpen
+                ) {
+                    Text("OPEN")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        showDeleteDialog = true
+                    }
+                ) {
+                    Text("DELETE")
+                }
             }
         }
+    }
+
+    if (showDeleteDialog) {
+
+        AlertDialog(
+
+            onDismissRequest = {
+                showDeleteDialog = false
+            },
+
+            title = {
+                Text("Delete Project")
+            },
+
+            text = {
+                Text(
+                    "Are you sure you want to delete \"${project.name}\"?"
+                )
+            },
+
+            confirmButton = {
+
+                Button(
+                    onClick = {
+
+                        showDeleteDialog = false
+
+                        onDelete()
+                    }
+                ) {
+                    Text("DELETE")
+                }
+            },
+
+            dismissButton = {
+
+                TextButton(
+                    onClick = {
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("CANCEL")
+                }
+            }
+        )
     }
 }
 
@@ -396,7 +495,6 @@ fun CreateProjectDialog(
                     }
                 }
             ) {
-
                 Text("CREATE")
             }
         },
@@ -406,9 +504,88 @@ fun CreateProjectDialog(
             TextButton(
                 onClick = onDismiss
             ) {
-
                 Text("CANCEL")
             }
         }
     )
+}
+
+@Composable
+fun EditorScreen(
+    project: Project,
+    onBack: () -> Unit
+) {
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF111827))
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF0F172A))
+                .padding(12.dp),
+
+            verticalAlignment = Alignment.CenterVertically,
+
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+
+            TextButton(
+                onClick = onBack
+            ) {
+                Text("← BACK")
+            }
+
+            Text(
+                text = project.name,
+                color = Color.White,
+                fontSize = 18.sp
+            )
+
+            Text(
+                text = project.type,
+                color = Color(0xFF00E5FF),
+                fontSize = 16.sp
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(20.dp),
+
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+
+            Text(
+                text = "PROJECT EDITOR",
+                color = Color(0xFF00E5FF),
+                fontSize = 28.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
+
+            Text(
+                text = "This is the beginning of the ${project.type} editor.",
+                color = Color.White,
+                fontSize = 16.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(30.dp)
+            )
+
+            Button(
+                onClick = {}
+            ) {
+                Text("ADD OBJECT")
+            }
+        }
+    }
 }
