@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,19 +33,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.math.min
-
-
-// ============================================================
-// MAIN ACTIVITY
-// ============================================================
 
 class MainActivity : ComponentActivity() {
 
@@ -61,11 +52,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-
-// ============================================================
-// DATA
-// ============================================================
-
 data class Project(
     val name: String,
     val type: String
@@ -77,11 +63,6 @@ data class GameObject(
     val type: String
 )
 
-
-// ============================================================
-// PROJECT SAVE / LOAD
-// ============================================================
-
 fun loadProjects(context: Context): List<Project> {
 
     val preferences = context.getSharedPreferences(
@@ -89,15 +70,12 @@ fun loadProjects(context: Context): List<Project> {
         Context.MODE_PRIVATE
     )
 
-    val data = preferences.getString(
-        "projects",
-        null
-    ) ?: return emptyList()
+    val data = preferences.getString("projects", null)
+        ?: return emptyList()
 
     return try {
 
         val array = JSONArray(data)
-
         val result = mutableListOf<Project>()
 
         for (i in 0 until array.length()) {
@@ -106,8 +84,8 @@ fun loadProjects(context: Context): List<Project> {
 
             result.add(
                 Project(
-                    name = item.optString("name", "Project"),
-                    type = item.optString("type", "3D")
+                    name = item.getString("name"),
+                    type = item.getString("type")
                 )
             )
         }
@@ -120,7 +98,6 @@ fun loadProjects(context: Context): List<Project> {
     }
 }
 
-
 fun saveProjects(
     context: Context,
     projects: List<Project>
@@ -128,7 +105,7 @@ fun saveProjects(
 
     val array = JSONArray()
 
-    projects.forEach { project ->
+    for (project in projects) {
 
         val item = JSONObject()
 
@@ -144,17 +121,9 @@ fun saveProjects(
             Context.MODE_PRIVATE
         )
         .edit()
-        .putString(
-            "projects",
-            array.toString()
-        )
+        .putString("projects", array.toString())
         .apply()
 }
-
-
-// ============================================================
-// APP
-// ============================================================
 
 @Composable
 fun LocoEngineApp(
@@ -175,8 +144,6 @@ fun LocoEngineApp(
         mutableStateOf<Project?>(null)
     }
 
-    // false = English
-    // true = Arabic
     var arabic by remember {
         mutableStateOf(false)
     }
@@ -222,6 +189,7 @@ fun LocoEngineApp(
                 },
 
                 onOpenProject = { project ->
+
                     openedProject = project
                 },
 
@@ -238,11 +206,6 @@ fun LocoEngineApp(
         }
     }
 }
-
-
-// ============================================================
-// HOME
-// ============================================================
 
 @Composable
 fun HomeScreen(
@@ -262,12 +225,14 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0F172A))
-            .padding(20.dp),
+            .padding(24.dp),
 
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        // LANGUAGE BUTTON
+        Spacer(
+            modifier = Modifier.height(30.dp)
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -277,14 +242,19 @@ fun HomeScreen(
             OutlinedButton(
                 onClick = onLanguageChange
             ) {
+
                 Text(
-                    if (arabic) "English" else "العربية"
+                    if (arabic) {
+                        "English"
+                    } else {
+                        "العربية"
+                    }
                 )
             }
         }
 
         Spacer(
-            modifier = Modifier.height(25.dp)
+            modifier = Modifier.height(15.dp)
         )
 
         Text(
@@ -298,12 +268,11 @@ fun HomeScreen(
         )
 
         Text(
-            text =
-                if (arabic)
-                    "محرك ألعاب للهواتف"
-                else
-                    "Mobile Game Engine",
-
+            text = if (arabic) {
+                "محرك ألعاب للهواتف"
+            } else {
+                "Mobile Game Engine"
+            },
             color = Color.White,
             fontSize = 18.sp
         )
@@ -319,10 +288,11 @@ fun HomeScreen(
         ) {
 
             Text(
-                if (arabic)
+                if (arabic) {
                     "إنشاء مشروع"
-                else
+                } else {
                     "CREATE PROJECT"
+                }
             )
         }
 
@@ -331,12 +301,11 @@ fun HomeScreen(
         )
 
         Text(
-            text =
-                if (arabic)
-                    "المشاريع"
-                else
-                    "PROJECTS",
-
+            text = if (arabic) {
+                "المشاريع"
+            } else {
+                "PROJECTS"
+            },
             color = Color(0xFF00E5FF),
             fontSize = 20.sp
         )
@@ -348,12 +317,11 @@ fun HomeScreen(
         if (projects.isEmpty()) {
 
             Text(
-                text =
-                    if (arabic)
-                        "لا توجد مشاريع"
-                    else
-                        "No projects yet",
-
+                text = if (arabic) {
+                    "لا توجد مشاريع"
+                } else {
+                    "No projects yet"
+                },
                 color = Color.Gray
             )
 
@@ -404,11 +372,6 @@ fun HomeScreen(
     }
 }
 
-
-// ============================================================
-// PROJECT CARD
-// ============================================================
-
 @Composable
 fun ProjectCard(
     project: Project,
@@ -439,12 +402,11 @@ fun ProjectCard(
         )
 
         Text(
-            text =
-                if (arabic)
-                    "النوع: ${project.type}"
-                else
-                    "Type: ${project.type}",
-
+            text = if (arabic) {
+                "النوع: ${project.type}"
+            } else {
+                "Type: ${project.type}"
+            },
             color = Color.LightGray
         )
 
@@ -461,10 +423,11 @@ fun ProjectCard(
             ) {
 
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "فتح"
-                    else
+                    } else {
                         "OPEN"
+                    }
                 )
             }
 
@@ -475,10 +438,11 @@ fun ProjectCard(
             ) {
 
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "حذف"
-                    else
+                    } else {
                         "DELETE"
+                    }
                 )
             }
         }
@@ -498,19 +462,21 @@ fun ProjectCard(
 
             title = {
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "حذف المشروع"
-                    else
+                    } else {
                         "Delete Project"
+                    }
                 )
             },
 
             text = {
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "هل تريد حذف ${project.name}؟"
-                    else
+                    } else {
                         "Delete ${project.name}?"
+                    }
                 )
             },
 
@@ -520,16 +486,16 @@ fun ProjectCard(
                     onClick = {
 
                         showDeleteDialog = false
-
                         onDelete()
                     }
                 ) {
 
                     Text(
-                        if (arabic)
+                        if (arabic) {
                             "حذف"
-                        else
+                        } else {
                             "DELETE"
+                        }
                     )
                 }
             },
@@ -543,21 +509,17 @@ fun ProjectCard(
                 ) {
 
                     Text(
-                        if (arabic)
+                        if (arabic) {
                             "إلغاء"
-                        else
+                        } else {
                             "CANCEL"
+                        }
                     )
                 }
             }
         )
     }
 }
-
-
-// ============================================================
-// CREATE PROJECT
-// ============================================================
 
 @Composable
 fun CreateProjectDialog(
@@ -580,10 +542,11 @@ fun CreateProjectDialog(
 
         title = {
             Text(
-                if (arabic)
+                if (arabic) {
                     "إنشاء مشروع"
-                else
+                } else {
                     "Create Project"
+                }
             )
         },
 
@@ -600,10 +563,11 @@ fun CreateProjectDialog(
 
                     label = {
                         Text(
-                            if (arabic)
+                            if (arabic) {
                                 "اسم المشروع"
-                            else
+                            } else {
                                 "Project Name"
+                            }
                         )
                     }
                 )
@@ -613,10 +577,11 @@ fun CreateProjectDialog(
                 )
 
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "نوع المشروع"
-                    else
+                    } else {
                         "Project Type"
+                    }
                 )
 
                 Spacer(
@@ -650,10 +615,11 @@ fun CreateProjectDialog(
                 )
 
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "المحدد: $projectType"
-                    else
+                    } else {
                         "Selected: $projectType"
+                    }
                 )
             }
         },
@@ -674,10 +640,11 @@ fun CreateProjectDialog(
             ) {
 
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "إنشاء"
-                    else
+                    } else {
                         "CREATE"
+                    }
                 )
             }
         },
@@ -689,20 +656,16 @@ fun CreateProjectDialog(
             ) {
 
                 Text(
-                    if (arabic)
+                    if (arabic) {
                         "إلغاء"
-                    else
+                    } else {
                         "CANCEL"
+                    }
                 )
             }
         }
     )
 }
-
-
-// ============================================================
-// EDITOR
-// ============================================================
 
 @Composable
 fun EditorScreen(
@@ -738,7 +701,7 @@ fun EditorScreen(
         mutableStateOf("SELECT")
     }
 
-    var showObjectDialog by remember {
+    var showAddObject by remember {
         mutableStateOf(false)
     }
 
@@ -758,8 +721,9 @@ fun EditorScreen(
         EditorToolBar(
             selectedTool = selectedTool,
             arabic = arabic,
-            onToolSelected = {
-                selectedTool = it
+
+            onToolSelected = { tool ->
+                selectedTool = tool
             }
         )
 
@@ -767,31 +731,25 @@ fun EditorScreen(
             modifier = Modifier.fillMaxSize()
         ) {
 
-            // SCENE TREE
-
             SceneTree(
                 objects = objects,
                 selectedObjectId = selectedObjectId,
                 arabic = arabic,
 
-                onSelect = {
-                    selectedObjectId = it
+                onSelect = { id ->
+                    selectedObjectId = id
                 },
 
                 onAddObject = {
-                    showObjectDialog = true
+                    showAddObject = true
                 }
             )
-
-            // VIEWPORT
 
             EditorViewport(
                 project = project,
                 selectedTool = selectedTool,
                 arabic = arabic
             )
-
-            // INSPECTOR
 
             InspectorPanel(
                 objects = objects,
@@ -801,52 +759,47 @@ fun EditorScreen(
         }
     }
 
-    // OBJECT CREATION DIALOG
-
-    if (showObjectDialog) {
+    if (showAddObject) {
 
         AddObjectDialog(
             arabic = arabic,
 
             onCancel = {
-                showObjectDialog = false
+                showAddObject = false
             },
 
             onObjectSelected = { type ->
 
                 val newId =
-                    (objects.maxOfOrNull { obj ->
-                        obj.id
-                    } ?: 0) + 1
+                    (objects.maxOfOrNull { obj -> obj.id } ?: 0) + 1
 
-                val baseName = when (type) {
-                    "Cube" -> "Cube"
-                    "Sphere" -> "Sphere"
-                    "Camera" -> "Camera"
-                    "Light" -> "Light"
-                    else -> "Object"
+                val objectName = when (type) {
+
+                    "Cube" -> "Cube $newId"
+
+                    "Sphere" -> "Sphere $newId"
+
+                    "Camera" -> "Camera $newId"
+
+                    "Light" -> "Light $newId"
+
+                    else -> "Object $newId"
                 }
 
                 objects.add(
                     GameObject(
                         id = newId,
-                        name = "$baseName $newId",
+                        name = objectName,
                         type = type
                     )
                 )
 
                 selectedObjectId = newId
-
-                showObjectDialog = false
+                showAddObject = false
             }
         )
     }
 }
-
-
-// ============================================================
-// EDITOR TOP BAR
-// ============================================================
 
 @Composable
 fun EditorTopBar(
@@ -860,7 +813,7 @@ fun EditorTopBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color(0xFF0F172A))
-            .padding(6.dp),
+            .padding(8.dp),
 
         horizontalArrangement =
             Arrangement.SpaceBetween,
@@ -874,24 +827,83 @@ fun EditorTopBar(
         ) {
 
             Text(
-                if (arabic)
+                if (arabic) {
                     "← رجوع"
-                else
+                } else {
                     "← BACK"
+                }
             )
         }
 
-        Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally
+        Text(
+            text = project.name,
+            color = Color.White,
+            fontSize = 18.sp
+        )
+
+        Row(
+            verticalAlignment =
+                Alignment.CenterVertically
         ) {
 
             Text(
-                text = project.name,
-                color = Color.White,
-                fontSize = 18.sp
+                text = project.type,
+                color = Color(0xFF00E5FF)
             )
 
-            Text(
-                text = project.type,
-      
+            Spacer(
+                modifier = Modifier.width(8.dp)
+            )
+
+            OutlinedButton(
+                onClick = onLanguageChange
+            ) {
+
+                Text(
+                    if (arabic) {
+                        "EN"
+                    } else {
+                        "AR"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EditorToolBar(
+    selectedTool: String,
+    arabic: Boolean,
+    onToolSelected: (String) -> Unit
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1E293B))
+            .padding(6.dp),
+
+        horizontalArrangement =
+            Arrangement.spacedBy(5.dp)
+    ) {
+
+        val tools = listOf(
+            "SELECT",
+            "MOVE",
+            "ROTATE",
+            "SCALE"
+        )
+
+        tools.forEach { tool ->
+
+            val label = when (tool) {
+
+                "SELECT" ->
+                    if (arabic) "تحديد" else "SELECT"
+
+                "MOVE" ->
+                    if (arabic) "تحريك" else "MOVE"
+
+                "ROTATE" ->
+                    if (arabic) "تدوير" else 
