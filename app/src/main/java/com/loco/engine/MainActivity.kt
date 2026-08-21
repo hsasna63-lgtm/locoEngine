@@ -153,31 +153,8 @@ fun LocoEngineApp(
 
         EditorScreen(
             project = openedProject!!,
-
             onBack = {
                 openedProject = null
-            },
-
-            onProjectRenamed = { oldProject, newName ->
-
-                val index = projects.indexOf(oldProject)
-
-                if (index >= 0) {
-
-                    val updatedProject = Project(
-                        name = newName,
-                        type = oldProject.type
-                    )
-
-                    projects[index] = updatedProject
-
-                    saveProjects(
-                        context,
-                        projects.toList()
-                    )
-
-                    openedProject = updatedProject
-                }
             }
         )
 
@@ -231,18 +208,6 @@ fun HomeScreen(
         mutableStateOf(false)
     }
 
-    var searchText by remember {
-        mutableStateOf("")
-    }
-
-    val filteredProjects = projects.filter {
-
-        it.name.contains(
-            searchText,
-            ignoreCase = true
-        )
-    }
-
     MaterialTheme {
 
         Column(
@@ -275,7 +240,7 @@ fun HomeScreen(
             )
 
             Spacer(
-                modifier = Modifier.height(25.dp)
+                modifier = Modifier.height(30.dp)
             )
 
             Button(
@@ -287,44 +252,14 @@ fun HomeScreen(
             }
 
             Spacer(
-                modifier = Modifier.height(20.dp)
+                modifier = Modifier.height(30.dp)
             )
 
-            OutlinedTextField(
-                value = searchText,
-
-                onValueChange = {
-                    searchText = it
-                },
-
-                label = {
-                    Text("Search Projects")
-                },
-
-                modifier = Modifier.fillMaxWidth()
+            Text(
+                text = "PROJECTS",
+                color = Color(0xFF00E5FF),
+                fontSize = 20.sp
             )
-
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-
-                Text(
-                    text = "PROJECTS",
-                    color = Color(0xFF00E5FF),
-                    fontSize = 20.sp
-                )
-
-                Text(
-                    text = "${projects.size}",
-                    color = Color.Gray
-                )
-            }
 
             Spacer(
                 modifier = Modifier.height(12.dp)
@@ -337,20 +272,13 @@ fun HomeScreen(
                     color = Color.Gray
                 )
 
-            } else if (filteredProjects.isEmpty()) {
-
-                Text(
-                    text = "No matching projects",
-                    color = Color.Gray
-                )
-
             } else {
 
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth()
                 ) {
 
-                    items(filteredProjects) { project ->
+                    items(projects) { project ->
 
                         ProjectCard(
                             project = project,
@@ -610,8 +538,7 @@ fun CreateProjectDialog(
 @Composable
 fun EditorScreen(
     project: Project,
-    onBack: () -> Unit,
-    onProjectRenamed: (Project, String) -> Unit
+    onBack: () -> Unit
 ) {
 
     val objects = remember {
@@ -640,14 +567,6 @@ fun EditorScreen(
         mutableStateOf("SELECT")
     }
 
-    var showRenameDialog by remember {
-        mutableStateOf(false)
-    }
-
-    var showAddObjectDialog by remember {
-        mutableStateOf(false)
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -656,17 +575,11 @@ fun EditorScreen(
 
         EditorTopBar(
             project = project,
-
-            onBack = onBack,
-
-            onRename = {
-                showRenameDialog = true
-            }
+            onBack = onBack
         )
 
         EditorToolBar(
             selectedTool = selectedTool,
-
             onToolSelected = {
                 selectedTool = it
             }
@@ -678,7 +591,6 @@ fun EditorScreen(
 
             SceneTree(
                 objects = objects,
-
                 selectedObjectId = selectedObjectId,
 
                 onSelect = {
@@ -686,21 +598,17 @@ fun EditorScreen(
                 },
 
                 onAddObject = {
-                    showAddObjectDialog = true
-                },
 
-                onDeleteObject = {
+                    val newId =
+                        (objects.maxOfOrNull { it.id } ?: 0) + 1
 
-                    val id = selectedObjectId
-
-                    if (id != null) {
-
-                        objects.removeAll {
-                            it.id == id
-                        }
-
-                        selectedObjectId = null
-                    }
+                    objects.add(
+                        GameObject(
+                            id = newId,
+                            name = "Cube $newId",
+                            type = "Mesh"
+                        )
+                    )
                 }
             )
 
@@ -715,76 +623,12 @@ fun EditorScreen(
             )
         }
     }
-
-    if (showRenameDialog) {
-
-        RenameProjectDialog(
-
-            currentName = project.name,
-
-            onCancel = {
-                showRenameDialog = false
-            },
-
-            onRename = { newName ->
-
-                onProjectRenamed(
-                    project,
-                    newName
-                )
-
-                showRenameDialog = false
-            }
-        )
-    }
-
-    if (showAddObjectDialog) {
-
-        AddObjectDialog(
-
-            onCancel = {
-                showAddObjectDialog = false
-            },
-
-            onAdd = { objectType ->
-
-                val newId =
-                    (objects.maxOfOrNull { it.id } ?: 0) + 1
-
-                val objectName = when (objectType) {
-
-                    "Cube" -> "Cube $newId"
-
-                    "Sphere" -> "Sphere $newId"
-
-                    "Cylinder" -> "Cylinder $newId"
-
-                    "Camera" -> "Camera $newId"
-
-                    "Light" -> "Light $newId"
-
-                    else -> "Object $newId"
-                }
-
-                objects.add(
-                    GameObject(
-                        id = newId,
-                        name = objectName,
-                        type = objectType
-                    )
-                )
-
-                showAddObjectDialog = false
-            }
-        )
-    }
 }
 
 @Composable
 fun EditorTopBar(
     project: Project,
-    onBack: () -> Unit,
-    onRename: () -> Unit
+    onBack: () -> Unit
 ) {
 
     Row(
@@ -794,7 +638,6 @@ fun EditorTopBar(
             .padding(8.dp),
 
         horizontalArrangement = Arrangement.SpaceBetween,
-
         verticalAlignment = Alignment.CenterVertically
     ) {
 
@@ -804,91 +647,17 @@ fun EditorTopBar(
             Text("← BACK")
         }
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Text(
+            text = project.name,
+            color = Color.White,
+            fontSize = 18.sp
+        )
 
-            Text(
-                text = project.name,
-                color = Color.White,
-                fontSize = 18.sp
-            )
-
-            Text(
-                text = project.type,
-                color = Color(0xFF00E5FF),
-                fontSize = 12.sp
-            )
-        }
-
-        TextButton(
-            onClick = onRename
-        ) {
-            Text("RENAME")
-        }
+        Text(
+            text = project.type,
+            color = Color(0xFF00E5FF)
+        )
     }
-}
-
-@Composable
-fun RenameProjectDialog(
-    currentName: String,
-    onCancel: () -> Unit,
-    onRename: (String) -> Unit
-) {
-
-    var newName by remember {
-        mutableStateOf(currentName)
-    }
-
-    AlertDialog(
-
-        onDismissRequest = onCancel,
-
-        title = {
-            Text("Rename Project")
-        },
-
-        text = {
-
-            OutlinedTextField(
-                value = newName,
-
-                onValueChange = {
-                    newName = it
-                },
-
-                label = {
-                    Text("New Project Name")
-                }
-            )
-        },
-
-        confirmButton = {
-
-            Button(
-                onClick = {
-
-                    if (newName.isNotBlank()) {
-
-                        onRename(
-                            newName.trim()
-                        )
-                    }
-                }
-            ) {
-                Text("RENAME")
-            }
-        },
-
-        dismissButton = {
-
-            TextButton(
-                onClick = onCancel
-            ) {
-                Text("CANCEL")
-            }
-        }
-    )
 }
 
 @Composable
@@ -941,4 +710,203 @@ fun EditorToolBar(
 
 @Composable
 fun SceneTree(
-    objects:
+    objects: List<GameObject>,
+    selectedObjectId: Int?,
+    onSelect: (Int) -> Unit,
+    onAddObject: () -> Unit
+) {
+
+    Column(
+        modifier = Modifier
+            .width(160.dp)
+            .fillMaxSize()
+            .background(Color(0xFF0B1220))
+            .padding(8.dp)
+    ) {
+
+        Text(
+            text = "SCENE",
+            color = Color(0xFF00E5FF),
+            fontSize = 18.sp
+        )
+
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
+
+        Button(
+            onClick = onAddObject,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("+ OBJECT")
+        }
+
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
+
+        LazyColumn {
+
+            items(
+                items = objects,
+                key = {
+                    it.id
+                }
+            ) { obj ->
+
+                val selected =
+                    obj.id == selectedObjectId
+
+                Text(
+                    text = obj.name,
+
+                    color = if (selected) {
+                        Color(0xFF00E5FF)
+                    } else {
+                        Color.White
+                    },
+
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelect(obj.id)
+                        }
+                        .padding(10.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EditorViewport(
+    project: Project,
+    selectedTool: String
+) {
+
+    Box(
+        modifier = Modifier
+            .width(300.dp)
+            .fillMaxSize()
+            .background(Color(0xFF182233)),
+
+        contentAlignment = Alignment.Center
+    ) {
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+
+            Text(
+                text = "${project.type} VIEWPORT",
+                color = Color(0xFF00E5FF),
+                fontSize = 22.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text(
+                text = "Tool: $selectedTool",
+                color = Color.White
+            )
+
+            Spacer(
+                modifier = Modifier.height(20.dp)
+            )
+
+            Text(
+                text = "WORKSPACE",
+                color = Color.Gray
+            )
+        }
+    }
+}
+
+@Composable
+fun InspectorPanel(
+    objects: List<GameObject>,
+    selectedObjectId: Int?
+) {
+
+    val selectedObject =
+        objects.firstOrNull {
+            it.id == selectedObjectId
+        }
+
+    Column(
+        modifier = Modifier
+            .width(180.dp)
+            .fillMaxSize()
+            .background(Color(0xFF0B1220))
+            .padding(10.dp)
+    ) {
+
+        Text(
+            text = "INSPECTOR",
+            color = Color(0xFF00E5FF),
+            fontSize = 18.sp
+        )
+
+        Spacer(
+            modifier = Modifier.height(15.dp)
+        )
+
+        if (selectedObject == null) {
+
+            Text(
+                text = "Select an object",
+                color = Color.Gray
+            )
+
+        } else {
+
+            Text(
+                text = selectedObject.name,
+                color = Color.White,
+                fontSize = 18.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            Text(
+                text = "Type: ${selectedObject.type}",
+                color = Color.Gray
+            )
+
+            Spacer(
+                modifier = Modifier.height(20.dp)
+            )
+
+            Text(
+                text = "TRANSFORM",
+                color = Color(0xFF00E5FF)
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text("Position")
+
+            Text("X: 0.0")
+            Text("Y: 0.0")
+            Text("Z: 0.0")
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text("Rotation: 0°")
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text("Scale: 1.0")
+        }
+    }
+}
