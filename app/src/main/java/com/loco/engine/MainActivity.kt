@@ -1,5 +1,6 @@
 package com.loco.engine
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,14 +33,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val savedProjects = loadProjects(this)
+
         setContent {
-            LocoEngineApp()
+            LocoEngineApp(
+                initialProjects = savedProjects,
+                onProjectsChanged = { projects ->
+                    saveProjects(this, projects)
+                }
+            )
         }
     }
 }
@@ -49,15 +59,90 @@ data class Project(
     val type: String
 )
 
+fun saveProjects(
+    context: Context,
+    projects: List<Project>
+) {
+
+    val jsonArray = JSONArray()
+
+    for (project in projects) {
+
+        val jsonObject = JSONObject()
+
+        jsonObject.put("name", project.name)
+        jsonObject.put("type", project.type)
+
+        jsonArray.put(jsonObject)
+    }
+
+    context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .putString(
+            "projects",
+            jsonArray.toString()
+        )
+        .apply()
+}
+
+fun loadProjects(
+    context: Context
+): List<Project> {
+
+    val preferences = context.getSharedPreferences(
+        "loco_engine",
+        Context.MODE_PRIVATE
+    )
+
+    val savedData = preferences.getString(
+        "projects",
+        null
+    ) ?: return emptyList()
+
+    return try {
+
+        val jsonArray = JSONArray(savedData)
+
+        val projects = mutableListOf<Project>()
+
+        for (i in 0 until jsonArray.length()) {
+
+            val jsonObject = jsonArray.getJSONObject(i)
+
+            projects.add(
+                Project(
+                    name = jsonObject.getString("name"),
+                    type = jsonObject.getString("type")
+                )
+            )
+        }
+
+        projects
+
+    } catch (e: Exception) {
+
+        emptyList()
+    }
+}
+
 @Composable
-fun LocoEngineApp() {
+fun LocoEngineApp(
+    initialProjects: List<Project>,
+    onProjectsChanged: (List<Project>) -> Unit
+) {
 
     var showCreateProject by remember {
         mutableStateOf(false)
     }
 
     val projects = remember {
-        mutableStateListOf<Project>()
+        mutableStateListOf<Project>().apply {
+            addAll(initialProjects)
+        }
     }
 
     MaterialTheme {
@@ -142,17 +227,22 @@ fun LocoEngineApp() {
         if (showCreateProject) {
 
             CreateProjectDialog(
+
                 onDismiss = {
                     showCreateProject = false
                 },
 
                 onCreate = { name, type ->
 
-                    projects.add(
-                        Project(
-                            name = name,
-                            type = type
-                        )
+                    val newProject = Project(
+                        name = name,
+                        type = type
+                    )
+
+                    projects.add(newProject)
+
+                    onProjectsChanged(
+                        projects.toList()
                     )
 
                     showCreateProject = false
@@ -197,9 +287,10 @@ fun ProjectCard(
 
             Button(
                 onClick = {
-                    // سيتم فتح محرر المشروع هنا لاحقًا.
+                    // سيتم فتح محرر المشروع لاحقًا.
                 }
             ) {
+
                 Text("OPEN")
             }
         }
@@ -234,6 +325,7 @@ fun CreateProjectDialog(
 
                 OutlinedTextField(
                     value = projectName,
+
                     onValueChange = {
                         projectName = it
                     },
@@ -304,6 +396,7 @@ fun CreateProjectDialog(
                     }
                 }
             ) {
+
                 Text("CREATE")
             }
         },
@@ -313,6 +406,7 @@ fun CreateProjectDialog(
             TextButton(
                 onClick = onDismiss
             ) {
+
                 Text("CANCEL")
             }
         }
