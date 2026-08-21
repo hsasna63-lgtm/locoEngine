@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,7 +62,16 @@ data class Project(
 data class GameObject(
     val id: Int,
     val name: String,
-    val type: String
+    val type: String,
+    val positionX: Float = 0f,
+    val positionY: Float = 0f,
+    val positionZ: Float = 0f,
+    val rotationX: Float = 0f,
+    val rotationY: Float = 0f,
+    val rotationZ: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val scaleZ: Float = 1f
 )
 
 fun loadProjects(context: Context): List<Project> {
@@ -78,7 +89,6 @@ fun loadProjects(context: Context): List<Project> {
     return try {
 
         val array = JSONArray(data)
-
         val result = mutableListOf<Project>()
 
         for (i in 0 until array.length()) {
@@ -180,7 +190,6 @@ fun LocoEngineApp(
         },
 
         onOpenProject = { project ->
-
             openedProject = project
         },
 
@@ -467,9 +476,7 @@ fun CreateProjectDialog(
                     modifier = Modifier.height(15.dp)
                 )
 
-                Text(
-                    text = "Project Type"
-                )
+                Text("Project Type")
 
                 Spacer(
                     modifier = Modifier.height(8.dp)
@@ -543,20 +550,24 @@ fun EditorScreen(
 
     val objects = remember {
 
-        mutableStateListOf(
+        mutableStateListOf<GameObject>().apply {
 
-            GameObject(
-                id = 1,
-                name = "Main Camera",
-                type = "Camera"
-            ),
-
-            GameObject(
-                id = 2,
-                name = "Directional Light",
-                type = "Light"
+            add(
+                GameObject(
+                    id = 1,
+                    name = "Main Camera",
+                    type = "Camera"
+                )
             )
-        )
+
+            add(
+                GameObject(
+                    id = 2,
+                    name = "Directional Light",
+                    type = "Light"
+                )
+            )
+        }
     }
 
     var selectedObjectId by remember {
@@ -565,6 +576,10 @@ fun EditorScreen(
 
     var selectedTool by remember {
         mutableStateOf("SELECT")
+    }
+
+    var showAddObjectDialog by remember {
+        mutableStateOf(false)
     }
 
     Column(
@@ -598,17 +613,7 @@ fun EditorScreen(
                 },
 
                 onAddObject = {
-
-                    val newId =
-                        (objects.maxOfOrNull { it.id } ?: 0) + 1
-
-                    objects.add(
-                        GameObject(
-                            id = newId,
-                            name = "Cube $newId",
-                            type = "Mesh"
-                        )
-                    )
+                    showAddObjectDialog = true
                 }
             )
 
@@ -622,6 +627,43 @@ fun EditorScreen(
                 selectedObjectId = selectedObjectId
             )
         }
+    }
+
+    if (showAddObjectDialog) {
+
+        AddObjectDialog(
+
+            onDismiss = {
+                showAddObjectDialog = false
+            },
+
+            onAdd = { type ->
+
+                val newId =
+                    (objects.maxOfOrNull { it.id } ?: 0) + 1
+
+                val objectName =
+                    when (type) {
+                        "Cube" -> "Cube $newId"
+                        "Sphere" -> "Sphere $newId"
+                        "Camera" -> "Camera $newId"
+                        "Light" -> "Light $newId"
+                        else -> "Object $newId"
+                    }
+
+                objects.add(
+                    GameObject(
+                        id = newId,
+                        name = objectName,
+                        type = type
+                    )
+                )
+
+                selectedObjectId = newId
+
+                showAddObjectDialog = false
+            }
+        )
     }
 }
 
@@ -758,7 +800,7 @@ fun SceneTree(
                     obj.id == selectedObjectId
 
                 Text(
-                    text = obj.name,
+                    text = "${obj.name}  [${obj.type}]",
 
                     color = if (selected) {
                         Color(0xFF00E5FF)
@@ -771,11 +813,99 @@ fun SceneTree(
                         .clickable {
                             onSelect(obj.id)
                         }
+                        .background(
+                            if (selected) {
+                                Color(0xFF1E3A4A)
+                            } else {
+                                Color.Transparent
+                            }
+                        )
                         .padding(10.dp)
                 )
             }
         }
     }
+}
+
+@Composable
+fun AddObjectDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String) -> Unit
+) {
+
+    AlertDialog(
+
+        onDismissRequest = onDismiss,
+
+        title = {
+            Text("Add Object")
+        },
+
+        text = {
+
+            Column {
+
+                Button(
+                    onClick = {
+                        onAdd("Cube")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Cube")
+                }
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        onAdd("Sphere")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Sphere")
+                }
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        onAdd("Camera")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Camera")
+                }
+
+                Spacer(
+                    modifier = Modifier.height(8.dp)
+                )
+
+                Button(
+                    onClick = {
+                        onAdd("Light")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Light")
+                }
+            }
+        },
+
+        confirmButton = {},
+
+        dismissButton = {
+
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("CANCEL")
+            }
+        }
+    )
 }
 
 @Composable
@@ -787,126 +917,4 @@ fun EditorViewport(
     Box(
         modifier = Modifier
             .width(300.dp)
-            .fillMaxSize()
-            .background(Color(0xFF182233)),
-
-        contentAlignment = Alignment.Center
-    ) {
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-
-            Text(
-                text = "${project.type} VIEWPORT",
-                color = Color(0xFF00E5FF),
-                fontSize = 22.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
-
-            Text(
-                text = "Tool: $selectedTool",
-                color = Color.White
-            )
-
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            Text(
-                text = "WORKSPACE",
-                color = Color.Gray
-            )
-        }
-    }
-}
-
-@Composable
-fun InspectorPanel(
-    objects: List<GameObject>,
-    selectedObjectId: Int?
-) {
-
-    val selectedObject =
-        objects.firstOrNull {
-            it.id == selectedObjectId
-        }
-
-    Column(
-        modifier = Modifier
-            .width(180.dp)
-            .fillMaxSize()
-            .background(Color(0xFF0B1220))
-            .padding(10.dp)
-    ) {
-
-        Text(
-            text = "INSPECTOR",
-            color = Color(0xFF00E5FF),
-            fontSize = 18.sp
-        )
-
-        Spacer(
-            modifier = Modifier.height(15.dp)
-        )
-
-        if (selectedObject == null) {
-
-            Text(
-                text = "Select an object",
-                color = Color.Gray
-            )
-
-        } else {
-
-            Text(
-                text = selectedObject.name,
-                color = Color.White,
-                fontSize = 18.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
-
-            Text(
-                text = "Type: ${selectedObject.type}",
-                color = Color.Gray
-            )
-
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            Text(
-                text = "TRANSFORM",
-                color = Color(0xFF00E5FF)
-            )
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
-
-            Text("Position")
-
-            Text("X: 0.0")
-            Text("Y: 0.0")
-            Text("Z: 0.0")
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
-
-            Text("Rotation: 0°")
-
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
-
-            Text("Scale: 1.0")
-        }
-    }
-}
+            .fillM
