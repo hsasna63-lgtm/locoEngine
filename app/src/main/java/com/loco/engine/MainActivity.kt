@@ -5,7 +5,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,8 +16,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -45,6 +51,7 @@ class MainActivity : ComponentActivity() {
         val savedProjects = loadProjects(this)
 
         setContent {
+
             LocoEngineApp(
                 initialProjects = savedProjects,
                 onProjectsChanged = { projects ->
@@ -58,6 +65,17 @@ class MainActivity : ComponentActivity() {
 data class Project(
     val name: String,
     val type: String
+)
+
+data class SceneObject(
+    val id: Int,
+    val name: String,
+    val type: String,
+    var x: Float = 0f,
+    var y: Float = 0f,
+    var z: Float = 0f,
+    var rotation: Float = 0f,
+    var scale: Float = 1f
 )
 
 fun saveProjects(
@@ -223,8 +241,7 @@ fun LocoEngineApp(
 
                 Text(
                     text = "No projects yet",
-                    color = Color.Gray,
-                    fontSize = 16.sp
+                    color = Color.Gray
                 )
 
             } else {
@@ -235,8 +252,8 @@ fun LocoEngineApp(
 
                     items(
                         items = projects,
-                        key = { project ->
-                            "${project.name}_${project.type}"
+                        key = {
+                            "${it.name}_${it.type}"
                         }
                     ) { project ->
 
@@ -321,8 +338,7 @@ fun ProjectCard(
             )
 
             Text(
-                text = "Type: ${project.type}",
-                fontSize = 14.sp
+                text = "Type: ${project.type}"
             )
 
             Spacer(
@@ -364,7 +380,7 @@ fun ProjectCard(
 
             text = {
                 Text(
-                    "Are you sure you want to delete \"${project.name}\"?"
+                    "Delete \"${project.name}\"?"
                 )
             },
 
@@ -516,17 +532,45 @@ fun EditorScreen(
     onBack: () -> Unit
 ) {
 
+    val objects = remember {
+
+        mutableStateListOf(
+
+            SceneObject(
+                id = 1,
+                name = "Main Camera",
+                type = "Camera"
+            ),
+
+            SceneObject(
+                id = 2,
+                name = "Directional Light",
+                type = "Light"
+            )
+        )
+    }
+
+    var selectedObject by remember {
+        mutableStateOf<SceneObject?>(null)
+    }
+
+    var currentTool by remember {
+        mutableStateOf("SELECT")
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF111827))
     ) {
 
+        // TOP BAR
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color(0xFF0F172A))
-                .padding(12.dp),
+                .padding(10.dp),
 
             verticalAlignment = Alignment.CenterVertically,
 
@@ -547,45 +591,253 @@ fun EditorScreen(
 
             Text(
                 text = project.type,
-                color = Color(0xFF00E5FF),
-                fontSize = 16.sp
+                color = Color(0xFF00E5FF)
             )
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(20.dp),
+        // TOOL BAR
 
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFF1E293B))
+                .padding(8.dp),
+
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
 
-            Text(
-                text = "PROJECT EDITOR",
-                color = Color(0xFF00E5FF),
-                fontSize = 28.sp
-            )
+            listOf(
+                "SELECT",
+                "MOVE",
+                "ROTATE",
+                "SCALE"
+            ).forEach { tool ->
 
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
+                if (currentTool == tool) {
 
-            Text(
-                text = "This is the beginning of the ${project.type} editor.",
-                color = Color.White,
-                fontSize = 16.sp
-            )
+                    Button(
+                        onClick = {
+                            currentTool = tool
+                        }
+                    ) {
+                        Text(tool)
+                    }
 
-            Spacer(
-                modifier = Modifier.height(30.dp)
-            )
+                } else {
 
-            Button(
-                onClick = {}
-            ) {
-                Text("ADD OBJECT")
+                    OutlinedButton(
+                        onClick = {
+                            currentTool = tool
+                        }
+                    ) {
+                        Text(tool)
+                    }
+                }
             }
         }
-    }
-}
+
+        Row(
+            modifier = Modifier.fillMaxSize()
+        ) {
+
+            // SCENE TREE
+
+            Column(
+                modifier = Modifier
+                    .width(170.dp)
+                    .fillMaxSize()
+                    .background(Color(0xFF0B1220))
+                    .padding(10.dp)
+            ) {
+
+                Text(
+                    text = "SCENE",
+                    color = Color(0xFF00E5FF),
+                    fontSize = 18.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
+
+                Button(
+                    onClick = {
+
+                        val newId =
+                            (objects.maxOfOrNull { it.id } ?: 0) + 1
+
+                        objects.add(
+                            SceneObject(
+                                id = newId,
+                                name = "Cube $newId",
+                                type = "Mesh"
+                            )
+                        )
+                    },
+
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("+ OBJECT")
+                }
+
+                Spacer(
+                    modifier = Modifier.height(10.dp)
+                )
+
+                LazyColumn {
+
+                    items(
+                        items = objects,
+                        key = {
+                            it.id
+                        }
+                    ) { obj ->
+
+                        Text(
+                            text = obj.name,
+
+                            color = if (
+                                selectedObject?.id == obj.id
+                            ) {
+                                Color(0xFF00E5FF)
+                            } else {
+                                Color.White
+                            },
+
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+
+                                    selectedObject = obj
+
+                                }
+                                .padding(10.dp)
+                        )
+                    }
+                }
+            }
+
+            // VIEWPORT
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize()
+                    .background(Color(0xFF182233))
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFF334155)
+                    ),
+
+                contentAlignment = Alignment.Center
+            ) {
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+
+                    Text(
+                        text = "${project.type} VIEWPORT",
+                        color = Color(0xFF00E5FF),
+                        fontSize = 24.sp
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(8.dp)
+                    )
+
+                    Text(
+                        text = "Tool: $currentTool",
+                        color = Color.White
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .background(
+                                Color(0xFF334155),
+                                RoundedCornerShape(8.dp)
+                            )
+                    )
+                }
+            }
+
+            // INSPECTOR
+
+            Column(
+                modifier = Modifier
+                    .width(190.dp)
+                    .fillMaxSize()
+                    .background(Color(0xFF0B1220))
+                    .padding(10.dp)
+            ) {
+
+                Text(
+                    text = "INSPECTOR",
+                    color = Color(0xFF00E5FF),
+                    fontSize = 18.sp
+                )
+
+                Spacer(
+                    modifier = Modifier.height(15.dp)
+                )
+
+                if (selectedObject == null) {
+
+                    Text(
+                        text = "Select an object",
+                        color = Color.Gray
+                    )
+
+                } else {
+
+                    val obj = selectedObject!!
+
+                    Text(
+                        text = obj.name,
+                        color = Color.White,
+                        fontSize = 18.sp
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(12.dp)
+                    )
+
+                    Text(
+                        text = "Type: ${obj.type}",
+                        color = Color.Gray
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(20.dp)
+                    )
+
+                    Text(
+                        text = "TRANSFORM",
+                        color = Color(0xFF00E5FF)
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(10.dp)
+                    )
+
+                    Text(
+                        text = "Position"
+                    )
+
+                    Text(
+                        text = "X: ${obj.x}"
+                    )
+
+                    Text(
+                        text = "Y: ${obj.y}"
+                    )
+
+                    Text(
+                        text = "Z: ${obj.z}"
+                    )
+                    
