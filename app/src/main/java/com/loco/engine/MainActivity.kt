@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,14 +15,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,15 +44,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val savedProjects = loadProjects(this)
+        val projects = loadProjects(this)
 
         setContent {
-            LocoEngineApp(
-                initialProjects = savedProjects,
-                onProjectsChanged = { projects ->
-                    saveProjects(this, projects)
-                }
-            )
+            LocoApp(projects)
         }
     }
 }
@@ -66,30 +57,62 @@ data class Project(
     val type: String
 )
 
-data class SceneObject(
+data class GameObject(
     val id: Int,
     val name: String,
-    val type: String,
-    var x: Float = 0f,
-    var y: Float = 0f,
-    var z: Float = 0f,
-    var rotation: Float = 0f,
-    var scale: Float = 1f
+    val type: String
 )
+
+fun loadProjects(context: Context): List<Project> {
+
+    val prefs = context.getSharedPreferences(
+        "loco_engine",
+        Context.MODE_PRIVATE
+    )
+
+    val data = prefs.getString("projects", null)
+        ?: return emptyList()
+
+    return try {
+
+        val array = JSONArray(data)
+        val result = mutableListOf<Project>()
+
+        for (i in 0 until array.length()) {
+
+            val item = array.getJSONObject(i)
+
+            result.add(
+                Project(
+                    item.getString("name"),
+                    item.getString("type")
+                )
+            )
+        }
+
+        result
+
+    } catch (e: Exception) {
+
+        emptyList()
+    }
+}
 
 fun saveProjects(
     context: Context,
     projects: List<Project>
 ) {
-    val jsonArray = JSONArray()
 
-    for (project in projects) {
-        val jsonObject = JSONObject()
+    val array = JSONArray()
 
-        jsonObject.put("name", project.name)
-        jsonObject.put("type", project.type)
+    projects.forEach { project ->
 
-        jsonArray.put(jsonObject)
+        val item = JSONObject()
+
+        item.put("name", project.name)
+        item.put("type", project.type)
+
+        array.put(item)
     }
 
     context
@@ -100,272 +123,246 @@ fun saveProjects(
         .edit()
         .putString(
             "projects",
-            jsonArray.toString()
+            array.toString()
         )
         .apply()
 }
 
-fun loadProjects(
-    context: Context
-): List<Project> {
-
-    val preferences = context.getSharedPreferences(
-        "loco_engine",
-        Context.MODE_PRIVATE
-    )
-
-    val savedData = preferences.getString(
-        "projects",
-        null
-    ) ?: return emptyList()
-
-    return try {
-
-        val jsonArray = JSONArray(savedData)
-        val projects = mutableListOf<Project>()
-
-        for (i in 0 until jsonArray.length()) {
-
-            val jsonObject = jsonArray.getJSONObject(i)
-
-            projects.add(
-                Project(
-                    name = jsonObject.getString("name"),
-                    type = jsonObject.getString("type")
-                )
-            )
-        }
-
-        projects
-
-    } catch (e: Exception) {
-        emptyList()
-    }
-}
-
 @Composable
-fun LocoEngineApp(
-    initialProjects: List<Project>,
-    onProjectsChanged: (List<Project>) -> Unit
+fun LocoApp(
+    savedProjects: List<Project>
 ) {
 
-    var showCreateProject by remember {
-        mutableStateOf(false)
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val projects = remember {
+
+        mutableStateListOf<Project>().apply {
+            addAll(savedProjects)
+        }
     }
 
-    var selectedProject by remember {
+    var openedProject by remember {
         mutableStateOf<Project?>(null)
     }
 
-    val projects = remember {
-        mutableStateListOf<Project>().apply {
-            addAll(initialProjects)
-        }
-    }
+    if (openedProject != null) {
 
-    if (selectedProject != null) {
-
-        EditorScreen(
-            project = selectedProject!!,
+        Editor(
+            project = openedProject!!,
             onBack = {
-                selectedProject = null
+                openedProject = null
             }
         )
 
         return
     }
 
-    MaterialTheme {
+    HomeScreen(
+        projects = projects,
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF0F172A))
-                .padding(24.dp),
+        onCreate = { name, type ->
 
-            horizontalAlignment = Alignment.CenterHorizontally
+            projects.add(
+                Project(name, type)
+            )
+
+            saveProjects(
+                context,
+                projects
+            )
+        },
+
+        onOpen = { project ->
+
+            openedProject = project
+        },
+
+        onDelete = { project ->
+
+            projects.remove(project)
+
+            saveProjects(
+                context,
+                projects
+            )
+        }
+    )
+}
+
+@Composable
+fun HomeScreen(
+    projects: MutableList<Project>,
+    onCreate: (String, String) -> Unit,
+    onOpen: (Project) -> Unit,
+    onDelete: (Project) -> Unit
+) {
+
+    var createDialog by remember {
+        mutableStateOf(false)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF0F172A))
+            .padding(24.dp),
+
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+
+        Spacer(
+            modifier = Modifier.height(50.dp)
+        )
+
+        Text(
+            text = "LOCO ENGINE",
+            color = Color(0xFF00E5FF),
+            fontSize = 32.sp
+        )
+
+        Text(
+            text = "Mobile Game Engine",
+            color = Color.White,
+            fontSize = 18.sp
+        )
+
+        Spacer(
+            modifier = Modifier.height(30.dp)
+        )
+
+        Button(
+            onClick = {
+                createDialog = true
+            }
         ) {
+            Text("CREATE PROJECT")
+        }
 
-            Spacer(
-                modifier = Modifier.height(40.dp)
-            )
+        Spacer(
+            modifier = Modifier.height(30.dp)
+        )
+
+        Text(
+            text = "PROJECTS",
+            color = Color(0xFF00E5FF),
+            fontSize = 20.sp
+        )
+
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
+
+        if (projects.isEmpty()) {
 
             Text(
-                text = "LOCO ENGINE",
-                color = Color(0xFF00E5FF),
-                fontSize = 32.sp
+                text = "No projects yet",
+                color = Color.Gray
             )
 
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
+        } else {
 
-            Text(
-                text = "Mobile Game Engine",
-                color = Color.White,
-                fontSize = 18.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(30.dp)
-            )
-
-            Button(
-                onClick = {
-                    showCreateProject = true
-                }
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text("CREATE PROJECT")
-            }
 
-            Spacer(
-                modifier = Modifier.height(30.dp)
-            )
+                items(projects) { project ->
 
-            Text(
-                text = "PROJECTS",
-                color = Color(0xFF00E5FF),
-                fontSize = 20.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
-            if (projects.isEmpty()) {
-
-                Text(
-                    text = "No projects yet",
-                    color = Color.Gray
-                )
-
-            } else {
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-
-                    items(
-                        items = projects,
-                        key = { project ->
-                            "${project.name}_${project.type}"
+                    ProjectItem(
+                        project = project,
+                        onOpen = {
+                            onOpen(project)
+                        },
+                        onDelete = {
+                            onDelete(project)
                         }
-                    ) { project ->
-
-                        ProjectCard(
-                            project = project,
-
-                            onOpen = {
-                                selectedProject = project
-                            },
-
-                            onDelete = {
-
-                                projects.remove(project)
-
-                                onProjectsChanged(
-                                    projects.toList()
-                                )
-                            }
-                        )
-                    }
+                    )
                 }
             }
         }
+    }
 
-        if (showCreateProject) {
+    if (createDialog) {
 
-            CreateProjectDialog(
+        CreateDialog(
 
-                onDismiss = {
-                    showCreateProject = false
-                },
+            onCancel = {
+                createDialog = false
+            },
 
-                onCreate = { name, type ->
+            onCreate = { name, type ->
 
-                    val newProject = Project(
-                        name = name,
-                        type = type
-                    )
+                onCreate(name, type)
 
-                    projects.add(newProject)
-
-                    onProjectsChanged(
-                        projects.toList()
-                    )
-
-                    showCreateProject = false
-                }
-            )
-        }
+                createDialog = false
+            }
+        )
     }
 }
 
 @Composable
-fun ProjectCard(
+fun ProjectItem(
     project: Project,
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
 
-    var showDeleteDialog by remember {
+    var deleteDialog by remember {
         mutableStateOf(false)
     }
 
-    Card(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .background(Color(0xFF1E293B))
+            .padding(14.dp)
     ) {
 
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Text(
+            text = project.name,
+            color = Color.White,
+            fontSize = 19.sp
+        )
+
+        Text(
+            text = "Type: ${project.type}",
+            color = Color.Gray
+        )
+
+        Spacer(
+            modifier = Modifier.height(10.dp)
+        )
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
 
-            Text(
-                text = project.name,
-                fontSize = 20.sp
-            )
-
-            Spacer(
-                modifier = Modifier.height(6.dp)
-            )
-
-            Text(
-                text = "Type: ${project.type}"
-            )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Button(
+                onClick = onOpen
             ) {
+                Text("OPEN")
+            }
 
-                Button(
-                    onClick = onOpen
-                ) {
-                    Text("OPEN")
+            OutlinedButton(
+                onClick = {
+                    deleteDialog = true
                 }
-
-                OutlinedButton(
-                    onClick = {
-                        showDeleteDialog = true
-                    }
-                ) {
-                    Text("DELETE")
-                }
+            ) {
+                Text("DELETE")
             }
         }
     }
 
-    if (showDeleteDialog) {
+    Spacer(
+        modifier = Modifier.height(8.dp)
+    )
+
+    if (deleteDialog) {
 
         AlertDialog(
 
             onDismissRequest = {
-                showDeleteDialog = false
+                deleteDialog = false
             },
 
             title = {
@@ -373,9 +370,7 @@ fun ProjectCard(
             },
 
             text = {
-                Text(
-                    "Delete \"${project.name}\"?"
-                )
+                Text("Delete ${project.name}?")
             },
 
             confirmButton = {
@@ -383,7 +378,7 @@ fun ProjectCard(
                 Button(
                     onClick = {
 
-                        showDeleteDialog = false
+                        deleteDialog = false
 
                         onDelete()
                     }
@@ -396,7 +391,7 @@ fun ProjectCard(
 
                 TextButton(
                     onClick = {
-                        showDeleteDialog = false
+                        deleteDialog = false
                     }
                 ) {
                     Text("CANCEL")
@@ -407,25 +402,25 @@ fun ProjectCard(
 }
 
 @Composable
-fun CreateProjectDialog(
-    onDismiss: () -> Unit,
+fun CreateDialog(
+    onCancel: () -> Unit,
     onCreate: (String, String) -> Unit
 ) {
 
-    var projectName by remember {
+    var name by remember {
         mutableStateOf("")
     }
 
-    var projectType by remember {
+    var type by remember {
         mutableStateOf("3D")
     }
 
     AlertDialog(
 
-        onDismissRequest = onDismiss,
+        onDismissRequest = onCancel,
 
         title = {
-            Text("Create New Project")
+            Text("Create Project")
         },
 
         text = {
@@ -433,31 +428,19 @@ fun CreateProjectDialog(
             Column {
 
                 OutlinedTextField(
-                    value = projectName,
+                    value = name,
 
                     onValueChange = {
-                        projectName = it
+                        name = it
                     },
 
                     label = {
                         Text("Project Name")
-                    },
-
-                    singleLine = true,
-
-                    modifier = Modifier.fillMaxWidth()
+                    }
                 )
 
                 Spacer(
-                    modifier = Modifier.height(20.dp)
-                )
-
-                Text(
-                    text = "Project Type"
-                )
-
-                Spacer(
-                    modifier = Modifier.height(8.dp)
+                    modifier = Modifier.height(15.dp)
                 )
 
                 Row(
@@ -466,7 +449,7 @@ fun CreateProjectDialog(
 
                     Button(
                         onClick = {
-                            projectType = "2D"
+                            type = "2D"
                         }
                     ) {
                         Text("2D")
@@ -474,7 +457,7 @@ fun CreateProjectDialog(
 
                     Button(
                         onClick = {
-                            projectType = "3D"
+                            type = "3D"
                         }
                     ) {
                         Text("3D")
@@ -482,11 +465,11 @@ fun CreateProjectDialog(
                 }
 
                 Spacer(
-                    modifier = Modifier.height(10.dp)
+                    modifier = Modifier.height(8.dp)
                 )
 
                 Text(
-                    text = "Selected: $projectType"
+                    text = "Selected: $type"
                 )
             }
         },
@@ -496,11 +479,11 @@ fun CreateProjectDialog(
             Button(
                 onClick = {
 
-                    if (projectName.isNotBlank()) {
+                    if (name.isNotBlank()) {
 
                         onCreate(
-                            projectName.trim(),
-                            projectType
+                            name.trim(),
+                            type
                         )
                     }
                 }
@@ -512,7 +495,7 @@ fun CreateProjectDialog(
         dismissButton = {
 
             TextButton(
-                onClick = onDismiss
+                onClick = onCancel
             ) {
                 Text("CANCEL")
             }
@@ -521,7 +504,7 @@ fun CreateProjectDialog(
 }
 
 @Composable
-fun EditorScreen(
+fun Editor(
     project: Project,
     onBack: () -> Unit
 ) {
@@ -529,30 +512,26 @@ fun EditorScreen(
     val objects = remember {
 
         mutableStateListOf(
-            SceneObject(
-                id = 1,
-                name = "Main Camera",
-                type = "Camera"
+            GameObject(
+                1,
+                "Main Camera",
+                "Camera"
             ),
 
-            SceneObject(
-                id = 2,
-                name = "Directional Light",
-                type = "Light"
+            GameObject(
+                2,
+                "Directional Light",
+                "Light"
             )
         )
     }
 
-    var selectedObjectId by remember {
+    var selectedId by remember {
         mutableStateOf<Int?>(null)
     }
 
-    var currentTool by remember {
+    var tool by remember {
         mutableStateOf("SELECT")
-    }
-
-    val selectedObject = objects.firstOrNull {
-        it.id == selectedObjectId
     }
 
     Column(
@@ -561,273 +540,333 @@ fun EditorScreen(
             .background(Color(0xFF111827))
     ) {
 
-        // TOP BAR
+        TopBar(
+            project = project,
+            onBack = onBack
+        )
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF0F172A))
-                .padding(10.dp),
-
-            verticalAlignment = Alignment.CenterVertically,
-
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-
-            TextButton(
-                onClick = onBack
-            ) {
-                Text("← BACK")
+        ToolBar(
+            selectedTool = tool,
+            onToolSelected = {
+                tool = it
             }
-
-            Text(
-                text = project.name,
-                color = Color.White,
-                fontSize = 18.sp
-            )
-
-            Text(
-                text = project.type,
-                color = Color(0xFF00E5FF)
-            )
-        }
-
-        // TOOL BAR
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color(0xFF1E293B))
-                .padding(8.dp),
-
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-
-            listOf(
-                "SELECT",
-                "MOVE",
-                "ROTATE",
-                "SCALE"
-            ).forEach { tool ->
-
-                if (currentTool == tool) {
-
-                    Button(
-                        onClick = {
-                            currentTool = tool
-                        }
-                    ) {
-                        Text(tool)
-                    }
-
-                } else {
-
-                    OutlinedButton(
-                        onClick = {
-                            currentTool = tool
-                        }
-                    ) {
-                        Text(tool)
-                    }
-                }
-            }
-        }
+        )
 
         Row(
             modifier = Modifier.fillMaxSize()
         ) {
 
-            // SCENE TREE
+            ScenePanel(
+                objects = objects,
+                selectedId = selectedId,
+                onSelect = {
+                    selectedId = it
+                },
 
-            Column(
-                modifier = Modifier
-                    .width(170.dp)
-                    .fillMaxSize()
-                    .background(Color(0xFF0B1220))
-                    .padding(10.dp)
-            ) {
+                onAdd = {
 
-                Text(
-                    text = "SCENE",
-                    color = Color(0xFF00E5FF),
-                    fontSize = 18.sp
-                )
+                    val id =
+                        (objects.maxOfOrNull { it.id } ?: 0) + 1
 
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
+                    objects.add(
+                        GameObject(
+                            id,
+                            "Cube $id",
+                            "Mesh"
+                        )
+                    )
+                }
+            )
+
+            Viewport(
+                project = project,
+                tool = tool
+            )
+
+            Inspector(
+                objects = objects,
+                selectedId = selectedId
+            )
+        }
+    }
+}
+
+@Composable
+fun TopBar(
+    project: Project,
+    onBack: () -> Unit
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF0F172A))
+            .padding(8.dp),
+
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        TextButton(
+            onClick = onBack
+        ) {
+            Text("← BACK")
+        }
+
+        Text(
+            text = project.name,
+            color = Color.White
+        )
+
+        Text(
+            text = project.type,
+            color = Color(0xFF00E5FF)
+        )
+    }
+}
+
+@Composable
+fun ToolBar(
+    selectedTool: String,
+    onToolSelected: (String) -> Unit
+) {
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1E293B))
+            .padding(6.dp),
+
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+    ) {
+
+        val tools = listOf(
+            "SELECT",
+            "MOVE",
+            "ROTATE",
+            "SCALE"
+        )
+
+        tools.forEach { tool ->
+
+            if (tool == selectedTool) {
 
                 Button(
                     onClick = {
-
-                        val newId =
-                            (objects.maxOfOrNull { it.id } ?: 0) + 1
-
-                        objects.add(
-                            SceneObject(
-                                id = newId,
-                                name = "Cube $newId",
-                                type = "Mesh"
-                            )
-                        )
-                    },
-
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("+ OBJECT")
-                }
-
-                Spacer(
-                    modifier = Modifier.height(10.dp)
-                )
-
-                LazyColumn {
-
-                    items(
-                        items = objects,
-                        key = { it.id }
-                    ) { obj ->
-
-                        val isSelected =
-                            selectedObjectId == obj.id
-
-                        Text(
-                            text = obj.name,
-
-                            color = if (isSelected) {
-                                Color(0xFF00E5FF)
-                            } else {
-                                Color.White
-                            },
-
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedObjectId = obj.id
-                                }
-                                .padding(10.dp)
-                        )
+                        onToolSelected(tool)
                     }
-                }
-            }
-
-            // VIEWPORT
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxSize()
-                    .background(Color(0xFF182233))
-                    .border(
-                        width = 1.dp,
-                        color = Color(0xFF334155)
-                    ),
-
-                contentAlignment = Alignment.Center
-            ) {
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Text(tool)
+                }
 
-                    Text(
-                        text = "${project.type} VIEWPORT",
-                        color = Color(0xFF00E5FF),
-                        fontSize = 24.sp
-                    )
+            } else {
 
-                    Spacer(
-                        modifier = Modifier.height(8.dp)
-                    )
-
-                    Text(
-                        text = "Tool: $currentTool",
-                        color = Color.White
-                    )
-
-                    Spacer(
-                        modifier = Modifier.height(20.dp)
-                    )
-
-                    Box(
-                        modifier = Modifier
-                            .size(100.dp)
-                            .background(
-                                Color(0xFF334155),
-                                RoundedCornerShape(8.dp)
-                            )
-                    )
+                OutlinedButton(
+                    onClick = {
+                        onToolSelected(tool)
+                    }
+                ) {
+                    Text(tool)
                 }
             }
+        }
+    }
+}
 
-            // INSPECTOR
+@Composable
+fun ScenePanel(
+    objects: List<GameObject>,
+    selectedId: Int?,
+    onSelect: (Int) -> Unit,
+    onAdd: () -> Unit
+) {
 
-            Column(
-                modifier = Modifier
-                    .width(190.dp)
-                    .fillMaxSize()
-                    .background(Color(0xFF0B1220))
-                    .padding(10.dp)
-            ) {
+    Column(
+        modifier = Modifier
+            .width(160.dp)
+            .fillMaxSize()
+            .background(Color(0xFF0B1220))
+            .padding(8.dp)
+    ) {
+
+        Text(
+            text = "SCENE",
+            color = Color(0xFF00E5FF),
+            fontSize = 18.sp
+        )
+
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
+
+        Button(
+            onClick = onAdd,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("+ OBJECT")
+        }
+
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
+
+        LazyColumn {
+
+            items(
+                objects,
+                key = {
+                    it.id
+                }
+            ) { obj ->
 
                 Text(
-                    text = "INSPECTOR",
-                    color = Color(0xFF00E5FF),
-                    fontSize = 18.sp
+                    text = obj.name,
+
+                    color = if (obj.id == selectedId) {
+                        Color(0xFF00E5FF)
+                    } else {
+                        Color.White
+                    },
+
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onSelect(obj.id)
+                        }
+                        .padding(10.dp)
                 )
+            }
+        }
+    }
+}
 
-                Spacer(
-                    modifier = Modifier.height(15.dp)
-                )
+@Composable
+fun Viewport(
+    project: Project,
+    tool: String
+) {
 
-                if (selectedObject == null) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxSize()
+            .background(Color(0xFF182233)),
 
-                    Text(
-                        text = "Select an object",
-                        color = Color.Gray
-                    )
+        contentAlignment = Alignment.Center
+    ) {
 
-                } else {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
 
-                    Text(
-                        text = selectedObject.name,
-                        color = Color.White,
-                        fontSize = 18.sp
-                    )
+            Text(
+                text = "${project.type} VIEWPORT",
+                color = Color(0xFF00E5FF),
+                fontSize = 22.sp
+            )
 
-                    Spacer(
-                        modifier = Modifier.height(12.dp)
-                    )
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
 
-                    Text(
-                        text = "Type: ${selectedObject.type}",
-                        color = Color.Gray
-                    )
+            Text(
+                text = "Tool: $tool",
+                color = Color.White
+            )
 
-                    Spacer(
-                        modifier = Modifier.height(20.dp)
-                    )
+            Spacer(
+                modifier = Modifier.height(20.dp)
+            )
 
-                    Text(
-                        text = "TRANSFORM",
-                        color = Color(0xFF00E5FF)
-                    )
+            Text(
+                text = "WORKSPACE",
+                color = Color.Gray
+            )
+        }
+    }
+}
 
-                    Spacer(
-                        modifier = Modifier.height(10.dp)
-                    )
+@Composable
+fun Inspector(
+    objects: List<GameObject>,
+    selectedId: Int?
+) {
 
-                    Text(
-                        text = "Position"
-                    )
+    val selected = objects.firstOrNull {
+        it.id == selectedId
+    }
 
-                    Text(
-                        text = "X: ${selectedObject.x}"
-                    )
+    Column(
+        modifier = Modifier
+            .width(180.dp)
+            .fillMaxSize()
+            .background(Color(0xFF0B1220))
+            .padding(10.dp)
+    ) {
 
-                    Text(
-                        text = "Y: ${selectedObject.y}"
-                    )
+        Text(
+            text = "INSPECTOR",
+            color = Color(0xFF00E5FF),
+            fontSize = 18.sp
+        )
 
-                    Text(
-       
+        Spacer(
+            modifier = Modifier.height(15.dp)
+        )
+
+        if (selected == null) {
+
+            Text(
+                text = "Select an object",
+                color = Color.Gray
+            )
+
+        } else {
+
+            Text(
+                text = selected.name,
+                color = Color.White,
+                fontSize = 18.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+            Text(
+                text = "Type: ${selected.type}",
+                color = Color.Gray
+            )
+
+            Spacer(
+                modifier = Modifier.height(20.dp)
+            )
+
+            Text(
+                text = "TRANSFORM",
+                color = Color(0xFF00E5FF)
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text("Position")
+            Text("X: 0.0")
+            Text("Y: 0.0")
+            Text("Z: 0.0")
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text("Rotation: 0°")
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text("Scale: 1.0")
+        }
+    }
+}
