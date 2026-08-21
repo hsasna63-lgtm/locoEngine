@@ -16,18 +16,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         val savedProjects = loadProjects(this)
-
         setContent {
             LocoEngineApp(savedProjects)
         }
@@ -39,32 +37,23 @@ data class Project(
     val type: String
 )
 
-// 🧱 تطوير نموذج GameObject ليدعم الخصائص ثلاثية الأبعاد
 data class GameObject(
     val id: Int,
-    var name: String,
+    val name: String,
     val type: String,
-    var posX: Float = 0f,
-    var posY: Float = 0f,
-    var posZ: Float = 0f,
-    var scale: Float = 1.0f
+    val posX: Float = 0f,
+    val posY: Float = 0f,
+    val posZ: Float = 0f,
+    val scale: Float = 1.0f
 )
 
 fun loadProjects(context: Context): List<Project> {
-    val preferences = context.getSharedPreferences(
-        "loco_engine",
-        Context.MODE_PRIVATE
-    )
-
-    val data = preferences.getString(
-        "projects",
-        null
-    ) ?: return emptyList()
+    val preferences = context.getSharedPreferences("loco_engine", Context.MODE_PRIVATE)
+    val data = preferences.getString("projects", null) ?: return emptyList()
 
     return try {
         val array = JSONArray(data)
         val result = mutableListOf<Project>()
-
         for (i in 0 until array.length()) {
             val item = array.getJSONObject(i)
             result.add(
@@ -80,49 +69,25 @@ fun loadProjects(context: Context): List<Project> {
     }
 }
 
-fun saveProjects(
-    context: Context,
-    projects: List<Project>
-) {
+fun saveProjects(context: Context, projects: List<Project>) {
     val array = JSONArray()
-
     for (project in projects) {
         val item = JSONObject()
         item.put("name", project.name)
         item.put("type", project.type)
         array.put(item)
     }
-
-    context
-        .getSharedPreferences(
-            "loco_engine",
-            Context.MODE_PRIVATE
-        )
+    context.getSharedPreferences("loco_engine", Context.MODE_PRIVATE)
         .edit()
-        .putString(
-            "projects",
-            array.toString()
-        )
+        .putString("projects", array.toString())
         .apply()
 }
 
 @Composable
-fun LocoEngineApp(
-    savedProjects: List<Project>
-) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-
-    val projects = remember {
-        mutableStateListOf<Project>().apply {
-            addAll(savedProjects)
-        }
-    }
-
-    var openedProject by remember {
-        mutableStateOf<Project?>(null)
-    }
-
-    // 🌐 حالة التحكم باللغة (العربية / الإنجليزية)
+fun LocoEngineApp(savedProjects: List<Project>) {
+    val context = LocalContext.current
+    val projects = remember { mutableStateListOf<Project>().apply { addAll(savedProjects) } }
+    var openedProject by remember { mutableStateOf<Project?>(null) }
     var isArabic by remember { mutableStateOf(true) }
 
     MaterialTheme {
@@ -131,9 +96,7 @@ fun LocoEngineApp(
                 project = openedProject!!,
                 isArabic = isArabic,
                 onToggleLanguage = { isArabic = !isArabic },
-                onBack = {
-                    openedProject = null
-                }
+                onBack = { openedProject = null }
             )
         } else {
             HomeScreen(
@@ -141,25 +104,14 @@ fun LocoEngineApp(
                 isArabic = isArabic,
                 onToggleLanguage = { isArabic = !isArabic },
                 onCreateProject = { name, type ->
-                    val project = Project(
-                        name = name,
-                        type = type
-                    )
+                    val project = Project(name = name, type = type)
                     projects.add(project)
-                    saveProjects(
-                        context,
-                        projects.toList()
-                    )
+                    saveProjects(context, projects.toList())
                 },
-                onOpenProject = { project ->
-                    openedProject = project
-                },
+                onOpenProject = { project -> openedProject = project },
                 onDeleteProject = { project ->
                     projects.remove(project)
-                    saveProjects(
-                        context,
-                        projects.toList()
-                    )
+                    saveProjects(context, projects.toList())
                 }
             )
         }
@@ -175,9 +127,7 @@ fun HomeScreen(
     onOpenProject: (Project) -> Unit,
     onDeleteProject: (Project) -> Unit
 ) {
-    var showCreateDialog by remember {
-        mutableStateOf(false)
-    }
+    var showCreateDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -186,7 +136,6 @@ fun HomeScreen(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 🌐 زر تغيير اللغة
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
@@ -196,13 +145,9 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(15.dp))
 
-        Text(
-            text = "LOCO ENGINE",
-            color = Color(0xFF00E5FF),
-            fontSize = 32.sp
-        )
+        Text(text = "LOCO ENGINE", color = Color(0xFF00E5FF), fontSize = 32.sp)
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -214,12 +159,8 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(30.dp))
 
-        Button(
-            onClick = {
-                showCreateDialog = true
-            }
-        ) {
-            Text(if (isArabic) "+ إنشاء مشروع" else "CREATE PROJECT")
+        Button(onClick = { showCreateDialog = true }) {
+            Text(if (isArabic) "إنشاء مشروع" else "CREATE PROJECT")
         }
 
         Spacer(modifier = Modifier.height(30.dp))
@@ -238,19 +179,13 @@ fun HomeScreen(
                 color = Color.Gray
             )
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 items(projects) { project ->
                     ProjectCard(
                         project = project,
                         isArabic = isArabic,
-                        onOpen = {
-                            onOpenProject(project)
-                        },
-                        onDelete = {
-                            onDeleteProject(project)
-                        }
+                        onOpen = { onOpenProject(project) },
+                        onDelete = { onDeleteProject(project) }
                     )
                 }
             }
@@ -260,14 +195,9 @@ fun HomeScreen(
     if (showCreateDialog) {
         CreateProjectDialog(
             isArabic = isArabic,
-            onCancel = {
-                showCreateDialog = false
-            },
+            onCancel = { showCreateDialog = false },
             onCreate = { name, type ->
-                onCreateProject(
-                    name,
-                    type
-                )
+                onCreateProject(name, type)
                 showCreateDialog = false
             }
         )
@@ -281,9 +211,7 @@ fun ProjectCard(
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var showDeleteDialog by remember {
-        mutableStateOf(false)
-    }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -291,35 +219,16 @@ fun ProjectCard(
             .background(Color(0xFF1E293B))
             .padding(14.dp)
     ) {
-        Text(
-            text = project.name,
-            color = Color.White,
-            fontSize = 20.sp
-        )
-
+        Text(text = project.name, color = Color.White, fontSize = 20.sp)
         Spacer(modifier = Modifier.height(5.dp))
-
-        Text(
-            text = "${if (isArabic) "النوع" else "Type"}: ${project.type}",
-            color = Color.LightGray
-        )
-
+        Text(text = "${if (isArabic) "النوع" else "Type"}: ${project.type}", color = Color.LightGray)
         Spacer(modifier = Modifier.height(10.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = onOpen
-            ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onOpen) {
                 Text(if (isArabic) "فتح" else "OPEN")
             }
-
-            OutlinedButton(
-                onClick = {
-                    showDeleteDialog = true
-                }
-            ) {
+            OutlinedButton(onClick = { showDeleteDialog = true }) {
                 Text(if (isArabic) "حذف" else "DELETE")
             }
         }
@@ -329,33 +238,19 @@ fun ProjectCard(
 
     if (showDeleteDialog) {
         AlertDialog(
-            onDismissRequest = {
-                showDeleteDialog = false
-            },
-            title = {
-                Text(if (isArabic) "حذف المشروع" else "Delete Project")
-            },
-            text = {
-                Text(
-                    if (isArabic) "هل أنت تأكد من حذف ${project.name}؟" else "Delete ${project.name}?"
-                )
-            },
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(if (isArabic) "حذف المشروع" else "Delete Project") },
+            text = { Text(if (isArabic) "حذف ${project.name}؟" else "Delete ${project.name}?") },
             confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteDialog = false
-                        onDelete()
-                    }
-                ) {
+                Button(onClick = {
+                    showDeleteDialog = false
+                    onDelete()
+                }) {
                     Text(if (isArabic) "حذف" else "DELETE")
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                    }
-                ) {
+                TextButton(onClick = { showDeleteDialog = false }) {
                     Text(if (isArabic) "إلغاء" else "CANCEL")
                 }
             }
@@ -369,84 +264,41 @@ fun CreateProjectDialog(
     onCancel: () -> Unit,
     onCreate: (String, String) -> Unit
 ) {
-    var projectName by remember {
-        mutableStateOf("")
-    }
-
-    var projectType by remember {
-        mutableStateOf("3D")
-    }
+    var projectName by remember { mutableStateOf("") }
+    var projectType by remember { mutableStateOf("3D") }
 
     AlertDialog(
         onDismissRequest = onCancel,
-        title = {
-            Text(if (isArabic) "إنشاء مشروع جديد" else "Create Project")
-        },
+        title = { Text(if (isArabic) "إنشاء مشروع" else "Create Project") },
         text = {
             Column {
                 OutlinedTextField(
                     value = projectName,
-                    onValueChange = {
-                        projectName = it
-                    },
-                    label = {
-                        Text(if (isArabic) "اسم المشروع" else "Project Name")
-                    }
+                    onValueChange = { projectName = it },
+                    label = { Text(if (isArabic) "اسم المشروع" else "Project Name") }
                 )
-
                 Spacer(modifier = Modifier.height(15.dp))
-
-                Text(
-                    text = if (isArabic) "نوع المشروع" else "Project Type"
-                )
-
+                Text(text = if (isArabic) "نوع المشروع" else "Project Type")
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            projectType = "2D"
-                        }
-                    ) {
-                        Text("2D")
-                    }
-
-                    Button(
-                        onClick = {
-                            projectType = "3D"
-                        }
-                    ) {
-                        Text("3D")
-                    }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { projectType = "2D" }) { Text("2D") }
+                    Button(onClick = { projectType = "3D" }) { Text("3D") }
                 }
-
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "${if (isArabic) "المحدد" else "Selected"}: $projectType"
-                )
+                Text(text = "${if (isArabic) "المحدد" else "Selected"}: $projectType")
             }
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    if (projectName.isNotBlank()) {
-                        onCreate(
-                            projectName.trim(),
-                            projectType
-                        )
-                    }
+            Button(onClick = {
+                if (projectName.isNotBlank()) {
+                    onCreate(projectName.trim(), projectType)
                 }
-            ) {
+            }) {
                 Text(if (isArabic) "إنشاء" else "CREATE")
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = onCancel
-            ) {
+            TextButton(onClick = onCancel) {
                 Text(if (isArabic) "إلغاء" else "CANCEL")
             }
         }
@@ -462,30 +314,13 @@ fun EditorScreen(
 ) {
     val objects = remember {
         mutableStateListOf(
-            GameObject(
-                id = 1,
-                name = "Main Camera",
-                type = "Camera"
-            ),
-            GameObject(
-                id = 2,
-                name = "Directional Light",
-                type = "Light"
-            )
+            GameObject(id = 1, name = "Main Camera", type = "Camera"),
+            GameObject(id = 2, name = "Directional Light", type = "Light")
         )
     }
-
-    var selectedObjectId by remember {
-        mutableStateOf<Int?>(1)
-    }
-
-    var selectedTool by remember {
-        mutableStateOf("SELECT")
-    }
-
-    var showAddObjectDialog by remember {
-        mutableStateOf(false)
-    }
+    var selectedObjectId by remember { mutableStateOf<Int?>(1) }
+    var selectedTool by remember { mutableStateOf("SELECT") }
+    var showAddObjectDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -501,39 +336,31 @@ fun EditorScreen(
 
         EditorToolBar(
             selectedTool = selectedTool,
-            onToolSelected = {
-                selectedTool = it
-            }
+            onToolSelected = { selectedTool = it }
         )
 
-        Row(
-            modifier = Modifier.fillMaxSize()
-        ) {
+        Row(modifier = Modifier.fillMaxSize()) {
             SceneTree(
-                modifier = Modifier.weight(0.25f),
+                modifier = Modifier.width(130.dp),
                 objects = objects,
                 selectedObjectId = selectedObjectId,
                 isArabic = isArabic,
-                onSelect = {
-                    selectedObjectId = it
-                },
-                onAddObjectClick = {
-                    showAddObjectDialog = true
-                }
+                onSelect = { selectedObjectId = it },
+                onAddObjectClick = { showAddObjectDialog = true }
             )
 
             EditorViewport(
-                modifier = Modifier.weight(0.50f),
+                modifier = Modifier.weight(1f),
                 project = project,
                 selectedTool = selectedTool
             )
 
             InspectorPanel(
-                modifier = Modifier.weight(0.25f),
+                modifier = Modifier.width(140.dp),
                 objects = objects,
                 selectedObjectId = selectedObjectId,
                 isArabic = isArabic,
-                onUpdateTransform = { id, posX, posY, posZ, scale ->
+                onUpdateTransform = { id: Int, posX: Float?, posY: Float?, posZ: Float?, scale: Float? ->
                     val index = objects.indexOfFirst { it.id == id }
                     if (index != -1) {
                         val item = objects[index]
@@ -549,20 +376,13 @@ fun EditorScreen(
         }
     }
 
-    // 🧱 نافذة إضافة الكائنات الجديدة
     if (showAddObjectDialog) {
         AddObjectDialog(
             isArabic = isArabic,
             onDismiss = { showAddObjectDialog = false },
             onAdd = { type ->
                 val newId = (objects.maxOfOrNull { it.id } ?: 0) + 1
-                objects.add(
-                    GameObject(
-                        id = newId,
-                        name = "$type $newId",
-                        type = type
-                    )
-                )
+                objects.add(GameObject(id = newId, name = "$type $newId", type = type))
                 selectedObjectId = newId
                 showAddObjectDialog = false
             }
@@ -585,27 +405,16 @@ fun EditorTopBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        TextButton(
-            onClick = onBack
-        ) {
+        TextButton(onClick = onBack) {
             Text("← ${if (isArabic) "رجوع" else "BACK"}")
         }
-
-        Text(
-            text = project.name,
-            color = Color.White,
-            fontSize = 18.sp
-        )
-
+        Text(text = project.name, color = Color.White, fontSize = 18.sp)
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = onToggleLanguage) {
                 Text(if (isArabic) "EN" else "عربي", color = Color.White, fontSize = 10.sp)
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = project.type,
-                color = Color(0xFF00E5FF)
-            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(text = project.type, color = Color(0xFF00E5FF))
         }
     }
 }
@@ -622,28 +431,14 @@ fun EditorToolBar(
             .padding(6.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        val tools = listOf(
-            "SELECT",
-            "MOVE",
-            "ROTATE",
-            "SCALE"
-        )
-
+        val tools = listOf("SELECT", "MOVE", "ROTATE", "SCALE")
         tools.forEach { tool ->
             if (tool == selectedTool) {
-                Button(
-                    onClick = {
-                        onToolSelected(tool)
-                    }
-                ) {
+                Button(onClick = { onToolSelected(tool) }) {
                     Text(tool, fontSize = 11.sp)
                 }
             } else {
-                OutlinedButton(
-                    onClick = {
-                        onToolSelected(tool)
-                    }
-                ) {
+                OutlinedButton(onClick = { onToolSelected(tool) }) {
                     Text(tool, fontSize = 11.sp)
                 }
             }
@@ -651,7 +446,6 @@ fun EditorToolBar(
     }
 }
 
-// 🧱 قائمة حقيقية لإضافة Objects
 @Composable
 fun AddObjectDialog(
     isArabic: Boolean,
@@ -660,25 +454,16 @@ fun AddObjectDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isArabic) "إضافة عنصر للمشهد" else "Add Object") },
+        title = { Text(if (isArabic) "إضافة عنصر" else "Add Object") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Cube") }) {
-                    Text("🧊 Cube")
-                }
-                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Sphere") }) {
-                    Text("🔮 Sphere")
-                }
-                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Camera") }) {
-                    Text("📷 Camera")
-                }
-                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Light") }) {
-                    Text("💡 Light")
-                }
+                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Cube") }) { Text("🧊 Cube") }
+                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Sphere") }) { Text("🔮 Sphere") }
+                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Camera") }) { Text("📷 Camera") }
+                Button(modifier = Modifier.fillMaxWidth(), onClick = { onAdd("Light") }) { Text("💡 Light") }
             }
         },
-        confirmButton = {},
-        dismissButton = {
+        confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(if (isArabic) "إلغاء" else "CANCEL")
             }
@@ -688,7 +473,7 @@ fun AddObjectDialog(
 
 @Composable
 fun SceneTree(
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
     objects: List<GameObject>,
     selectedObjectId: Int?,
     isArabic: Boolean,
@@ -701,31 +486,19 @@ fun SceneTree(
             .background(Color(0xFF0B1220))
             .padding(8.dp)
     ) {
-        Text(
-            text = if (isArabic) "المشهد" else "SCENE",
-            color = Color(0xFF00E5FF),
-            fontSize = 16.sp
-        )
-
+        Text(text = if (isArabic) "المشهد" else "SCENE", color = Color(0xFF00E5FF), fontSize = 16.sp)
         Spacer(modifier = Modifier.height(8.dp))
-
         Button(
             onClick = onAddObjectClick,
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = PaddingValues(4.dp)
+            contentPadding = PaddingValues(2.dp)
         ) {
             Text(if (isArabic) "+ عنصر" else "+ OBJECT", fontSize = 11.sp)
         }
-
         Spacer(modifier = Modifier.height(8.dp))
-
         LazyColumn {
-            items(
-                items = objects,
-                key = { it.id }
-            ) { obj ->
+            items(objects) { obj ->
                 val selected = obj.id == selectedObjectId
-
                 val icon = when (obj.type) {
                     "Cube" -> "🧊 "
                     "Sphere" -> "🔮 "
@@ -733,7 +506,6 @@ fun SceneTree(
                     "Light" -> "💡 "
                     else -> "📦 "
                 }
-
                 Text(
                     text = icon + obj.name,
                     color = if (selected) Color(0xFF00E5FF) else Color.White,
@@ -748,4 +520,81 @@ fun SceneTree(
     }
 }
 
-// 🎮 تحسين Viewport ليظهر بمساحة عمل حقيقية 
+@Composable
+fun EditorViewport(
+    modifier: Modifier = Modifier,
+    project: Project,
+    selectedTool: String
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(Color(0xFF182233)),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val gridStep = 30.dp.toPx()
+            val w = size.width
+            val h = size.height
+
+            var x = 0f
+            while (x < w) {
+                drawLine(Color(0xFF243248), start = Offset(x, 0f), end = Offset(x, h), strokeWidth = 1f)
+                x += gridStep
+            }
+            var y = 0f
+            while (y < h) {
+                drawLine(Color(0xFF243248), start = Offset(0f, y), end = Offset(w, y), strokeWidth = 1f)
+                y += gridStep
+            }
+
+            val centerX = w / 2
+            val centerY = h / 2
+            drawLine(Color(0xFFFF5252), start = Offset(centerX - 40, centerY), end = Offset(centerX + 40, centerY), strokeWidth = 3f)
+            drawLine(Color(0xFF4CAF50), start = Offset(centerX, centerY - 40), end = Offset(centerX, centerY + 40), strokeWidth = 3f)
+        }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = "${project.type} VIEWPORT", color = Color(0xFF00E5FF), fontSize = 18.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(text = "Tool: $selectedTool", color = Color.White, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(text = "WORKSPACE GRID", color = Color.Gray, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
+fun InspectorPanel(
+    modifier: Modifier = Modifier,
+    objects: List<GameObject>,
+    selectedObjectId: Int?,
+    isArabic: Boolean,
+    onUpdateTransform: (id: Int, posX: Float?, posY: Float?, posZ: Float?, scale: Float?) -> Unit
+) {
+    val selectedObject = objects.firstOrNull { it.id == selectedObjectId }
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .background(Color(0xFF0B1220))
+            .padding(8.dp)
+    ) {
+        Text(text = if (isArabic) "الخصائص" else "INSPECTOR", color = Color(0xFF00E5FF), fontSize = 16.sp)
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (selectedObject == null) {
+            Text(text = if (isArabic) "حدد عنصراً" else "Select object", color = Color.Gray, fontSize = 12.sp)
+        } else {
+            Text(text = selectedObject.name, color = Color.White, fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = "Type: ${selectedObject.type}", color = Color.Gray, fontSize = 11.sp)
+            Spacer(modifier = Modifier.height(15.dp))
+            Text(text = "TRANSFORM", color = Color(0xFF00E5FF), fontSize = 11.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TransformControlRow("Pos X", selectedObject.posX) { onUpdateTransform(selectedObject.id, it, null, null, null) }
+            TransformControlRow("Pos Y", selectedObject.posY) { onUpdateTransform(selectedObject.id, null, it, null, null) }
+            TransformControlRow("Pos Z", selectedObject.posZ) { onUpdateTransform(selectedObject.id, null, null, it, null) }
+
+    
