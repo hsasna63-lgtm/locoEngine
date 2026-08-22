@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -998,7 +999,6 @@ fun ProjectCard(
                     onClick = {
 
                         showDeleteDialog = false
-
                         onDelete()
                     }
                 ) {
@@ -1107,6 +1107,7 @@ fun CreateProjectDialog(
 
 
                 Text(
+
                     text =
                         text(
                             language,
@@ -1129,6 +1130,7 @@ fun CreateProjectDialog(
                 ) {
 
                     Button(
+
                         onClick = {
                             projectType = "2D"
                         }
@@ -1139,6 +1141,7 @@ fun CreateProjectDialog(
 
 
                     Button(
+
                         onClick = {
                             projectType = "3D"
                         }
@@ -1161,7 +1164,7 @@ fun CreateProjectDialog(
                         text(
                             language,
                             "Selected: $projectType",
-                            "المحدد: $projectType"
+                            "المختار: $projectType"
                         )
                 )
             }
@@ -1229,11 +1232,6 @@ fun EditorScreen(
     val context =
         LocalContext.current
 
-
-    /*
-       يتم تحميل المشهد من SharedPreferences.
-       لذلك عند تدوير الهاتف لن تضيع العناصر.
-    */
 
     val objects =
         remember(
@@ -1361,7 +1359,7 @@ fun EditorScreen(
                     val selected =
                         objects.firstOrNull {
                             it.id ==
-                                    selectedObjectId
+                                selectedObjectId
                         }
 
                     if (selected != null) {
@@ -1378,7 +1376,7 @@ fun EditorScreen(
                                 id = newId,
                                 name =
                                     selected.name +
-                                            " Copy"
+                                    " Copy"
                             )
 
                         objects.add(copy)
@@ -1441,71 +1439,68 @@ fun EditorScreen(
                 }
             )
         }
-    }
 
 
-    if (showObjectDialog) {
+        if (showObjectDialog) {
 
-        AddObjectDialog(
+            AddObjectDialog(
 
-            language = language,
+                language = language,
 
-            onCancel = {
-                showObjectDialog = false
-            },
+                onCancel = {
+                    showObjectDialog = false
+                },
 
-            onAdd = {
+                onAdd = {
 
-                objectType ->
+                    objectType ->
 
-                val newId =
-                    (
-                        objects.maxOfOrNull {
-                            it.id
-                        } ?: 0
-                    ) + 1
-
-
-                val objectName =
-                    when (objectType) {
-
-                        "Cube" ->
-                            "Cube $newId"
-
-                        "Sphere" ->
-                            "Sphere $newId"
-
-                        "Camera" ->
-                            "Camera $newId"
-
-                        else ->
-                            "Light $newId"
-                    }
+                    val newId =
+                        (
+                            objects.maxOfOrNull {
+                                it.id
+                            } ?: 0
+                        ) + 1
 
 
-                objects.add(
+                    val objectName =
+                        when (objectType) {
 
-                    GameObject(
+                            "Cube" ->
+                                "Cube $newId"
 
-                        id = newId,
+                            "Sphere" ->
+                                "Sphere $newId"
 
-                        name = objectName,
+                            "Camera" ->
+                                "Camera $newId"
 
-                        type = objectType
+                            else ->
+                                "Light $newId"
+                        }
+
+                    objects.add(
+
+                        GameObject(
+
+                            id = newId,
+
+                            name = objectName,
+
+                            type = objectType
+                        )
                     )
-                )
 
+                    selectedObjectId =
+                        newId
 
-                selectedObjectId =
-                    newId
+                    saveScene()
 
-
-                saveScene()
-
-                showObjectDialog =
-                    false
-            }
-        )
+                    showObjectDialog =
+                        false
+                }
+            )
+        }
     }
 }
 
@@ -1544,11 +1539,12 @@ fun EditorTopBar(
         ) {
 
             Text(
+
                 text =
                     text(
                         language,
                         "← BACK",
-                        "رجوع →"
+                        "← رجوع"
                     )
             )
         }
@@ -1577,7 +1573,6 @@ fun EditorTopBar(
                 color =
                     Color(0xFF00E5FF)
             )
-
 
             TextButton(
 
@@ -1646,7 +1641,6 @@ fun EditorToolBar(
                 "SCALE"
             )
 
-
         tools.forEach { tool ->
 
             val translated =
@@ -1656,7 +1650,7 @@ fun EditorToolBar(
                         text(
                             language,
                             "SELECT",
-                            "تحديد"
+                            "اختيار"
                         )
 
                     "MOVE" ->
@@ -1670,7 +1664,7 @@ fun EditorToolBar(
                         text(
                             language,
                             "ROTATE",
-                            "تدوير"
+                            "دوران"
                         )
 
                     else ->
@@ -1680,7 +1674,6 @@ fun EditorToolBar(
                             "تحجيم"
                         )
                 }
-
 
             if (tool == selectedTool) {
 
@@ -1759,7 +1752,6 @@ fun SceneTree(
                 Modifier.height(8.dp)
         )
 
-
         Button(
 
             onClick = onAddObject,
@@ -1774,7 +1766,7 @@ fun SceneTree(
                     text(
                         language,
                         "+ OBJECT",
-                        "+ عنصر"
+                        "+ يُدينة"
                     )
             )
         }
@@ -1853,6 +1845,7 @@ fun SceneTree(
             ) {
 
                 Text(
+
                     text =
                         text(
                             language,
@@ -1864,7 +1857,6 @@ fun SceneTree(
                 )
             }
 
-
             OutlinedButton(
 
                 onClick = onDeleteObject,
@@ -1874,6 +1866,7 @@ fun SceneTree(
             ) {
 
                 Text(
+
                     text =
                         text(
                             language,
@@ -1912,7 +1905,7 @@ fun AddObjectDialog(
                     text(
                         language,
                         "Add Object",
-                        "إضافة عنصر"
+                        "إضافة يُدينة"
                     )
             )
         },
@@ -1922,9 +1915,13 @@ fun AddObjectDialog(
             Column {
 
                 ObjectButton(
+
                     name = "Cube",
+
                     arabicName = "مكعب",
+
                     language = language,
+
                     onClick = {
                         onAdd("Cube")
                     }
@@ -1932,9 +1929,13 @@ fun AddObjectDialog(
 
 
                 ObjectButton(
+
                     name = "Sphere",
+
                     arabicName = "كرة",
+
                     language = language,
+
                     onClick = {
                         onAdd("Sphere")
                     }
@@ -1942,9 +1943,13 @@ fun AddObjectDialog(
 
 
                 ObjectButton(
+
                     name = "Camera",
-                    arabicName = "كاميرا",
+
+                    arabicName = "آلة تصوير",
+
                     language = language,
+
                     onClick = {
                         onAdd("Camera")
                     }
@@ -1952,9 +1957,13 @@ fun AddObjectDialog(
 
 
                 ObjectButton(
+
                     name = "Light",
+
                     arabicName = "ضوء",
+
                     language = language,
+
                     onClick = {
                         onAdd("Light")
                     }
@@ -2068,7 +2077,7 @@ fun EditorViewport(
                     text(
                         language,
                         "${project.type} VIEWPORT",
-                        "نافذة ${project.type}"
+                        "عرض ${project.type}"
                     ),
 
                 color =
@@ -2094,7 +2103,7 @@ fun EditorViewport(
                     ),
 
                 color =
-                    Color(0xFF64748B)
+                    Color(0xFF647B8B)
             )
 
 
@@ -2107,10 +2116,10 @@ fun EditorViewport(
             Text(
 
                 text =
-                    "X  ─────────────  Z",
+                    "X  ───────────────────  Z",
 
                 color =
-                    Color(0xFF64748B),
+                    Color(0xFF647B8B),
 
                 fontSize = 15.sp
             )
@@ -2143,12 +2152,12 @@ fun EditorViewport(
 
                     val isSelected =
                         obj.id ==
-                                selectedObjectId
+                            selectedObjectId
 
 
                     val objectText =
                         "${obj.name}\n" +
-                                "P(${obj.posX}, ${obj.posY}, ${obj.posZ})"
+                        "P(${obj.posX}, ${obj.posY}, ${obj.posZ})"
 
 
                     Box(
@@ -2211,7 +2220,7 @@ fun EditorViewport(
                                         text(
                                             language,
                                             "Tool: $selectedTool",
-                                            "الأداة: $selectedTool"
+                                            "أداة: $selectedTool"
                                         ),
 
                                     color =
@@ -2266,7 +2275,7 @@ fun InspectorPanel(
                 text(
                     language,
                     "INSPECTOR",
-                    "الخصائص"
+                    "ألة البحث"
                 ),
 
             color =
@@ -2290,7 +2299,7 @@ fun InspectorPanel(
                     text(
                         language,
                         "Select an object",
-                        "حدد عنصرًا"
+                        "اختر يُدينة"
                     ),
 
                 color = Color.Gray
@@ -2567,7 +2576,7 @@ fun InspectorContent(
             text(
                 language,
                 "Tool: $selectedTool",
-                "الأداة: $selectedTool"
+                "أداة: $selectedTool"
             ),
 
         color =
@@ -2587,7 +2596,7 @@ fun InspectorContent(
             text(
                 language,
                 "POSITION",
-                "الموقع"
+                "الموضعية"
             ),
 
         color =
@@ -2603,7 +2612,6 @@ fun InspectorContent(
         }
     )
 
-
     TransformField(
         label = "Y",
         value = yText,
@@ -2612,7 +2620,6 @@ fun InspectorContent(
         }
     )
 
-
     TransformField(
         label = "Z",
         value = zText,
@@ -2620,7 +2627,6 @@ fun InspectorContent(
             zText = it
         }
     )
-
 
     Button(
 
@@ -2633,6 +2639,7 @@ fun InspectorContent(
     ) {
 
         Text(
+
             text =
                 text(
                     language,
@@ -2673,7 +2680,6 @@ fun InspectorContent(
         }
     )
 
-
     TransformField(
         label = "Y",
         value = ryText,
@@ -2682,7 +2688,6 @@ fun InspectorContent(
         }
     )
 
-
     TransformField(
         label = "Z",
         value = rzText,
@@ -2690,7 +2695,6 @@ fun InspectorContent(
             rzText = it
         }
     )
-
 
     Button(
 
@@ -2728,7 +2732,7 @@ fun InspectorContent(
             text(
                 language,
                 "SCALE",
-                "الحجم"
+                "التحجيم"
             ),
 
         color =
@@ -2744,7 +2748,6 @@ fun InspectorContent(
         }
     )
 
-
     TransformField(
         label = "Y",
         value = syText,
@@ -2753,7 +2756,6 @@ fun InspectorContent(
         }
     )
 
-
     TransformField(
         label = "Z",
         value = szText,
@@ -2761,7 +2763,6 @@ fun InspectorContent(
             szText = it
         }
     )
-
 
     Button(
 
@@ -2779,7 +2780,7 @@ fun InspectorContent(
                 text(
                     language,
                     "APPLY SCALE",
-                    "تطبيق الحجم"
+                    "تطبيق التحجيم"
                 ),
 
             fontSize = 11.sp
@@ -2809,7 +2810,7 @@ fun InspectorContent(
                 text(
                     language,
                     "RESET TRANSFORM",
-                    "إعادة التحويل"
+                    "إعادة تعيين التحويل"
                 ),
 
             fontSize = 10.sp
@@ -2848,7 +2849,6 @@ fun TransformField(
             modifier =
                 Modifier.width(20.dp)
         )
-
 
         OutlinedTextField(
 
