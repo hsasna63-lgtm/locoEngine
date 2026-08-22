@@ -7,14 +7,18 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,10 +40,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
+
 
 class MainActivity : ComponentActivity() {
 
@@ -48,26 +56,44 @@ class MainActivity : ComponentActivity() {
 
         val savedProjects = loadProjects(this)
         val savedLanguage = loadLanguage(this)
+        val openedProject = loadOpenedProject(this)
 
         setContent {
+
             LocoEngineApp(
                 savedProjects = savedProjects,
-                initialLanguage = savedLanguage
+                initialLanguage = savedLanguage,
+                initialOpenedProject = openedProject
             )
         }
     }
 }
+
+
+/* =========================
+   DATA
+   ========================= */
 
 data class Project(
     val name: String,
     val type: String
 )
 
+
 data class GameObject(
     val id: Int,
     val name: String,
-    val type: String
+    val type: String,
+    val x: Float = 0f,
+    val y: Float = 0f,
+    val rotation: Float = 0f,
+    val scale: Float = 1f
 )
+
+
+/* =========================
+   PROJECT STORAGE
+   ========================= */
 
 fun loadProjects(context: Context): List<Project> {
 
@@ -106,6 +132,7 @@ fun loadProjects(context: Context): List<Project> {
     }
 }
 
+
 fun saveProjects(
     context: Context,
     projects: List<Project>
@@ -136,6 +163,11 @@ fun saveProjects(
         .apply()
 }
 
+
+/* =========================
+   LANGUAGE
+   ========================= */
+
 fun loadLanguage(context: Context): String {
 
     return context
@@ -148,6 +180,7 @@ fun loadLanguage(context: Context): String {
             "en"
         ) ?: "en"
 }
+
 
 fun saveLanguage(
     context: Context,
@@ -167,6 +200,7 @@ fun saveLanguage(
         .apply()
 }
 
+
 fun text(
     language: String,
     english: String,
@@ -180,10 +214,208 @@ fun text(
     }
 }
 
+
+/* =========================
+   OPENED PROJECT STORAGE
+   ========================= */
+
+fun saveOpenedProject(
+    context: Context,
+    project: Project?
+) {
+
+    val editor = context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .edit()
+
+    if (project == null) {
+
+        editor.remove("opened_project_name")
+        editor.remove("opened_project_type")
+
+    } else {
+
+        editor.putString(
+            "opened_project_name",
+            project.name
+        )
+
+        editor.putString(
+            "opened_project_type",
+            project.type
+        )
+    }
+
+    editor.apply()
+}
+
+
+fun loadOpenedProject(
+    context: Context
+): Project? {
+
+    val preferences = context.getSharedPreferences(
+        "loco_engine",
+        Context.MODE_PRIVATE
+    )
+
+    val name = preferences.getString(
+        "opened_project_name",
+        null
+    )
+
+    val type = preferences.getString(
+        "opened_project_type",
+        null
+    )
+
+    if (name == null || type == null) {
+        return null
+    }
+
+    return Project(
+        name = name,
+        type = type
+    )
+}
+
+
+/* =========================
+   OBJECT STORAGE
+   ========================= */
+
+fun objectStorageKey(
+    project: Project
+): String {
+
+    return "objects_${project.name}_${project.type}"
+        .replace(" ", "_")
+}
+
+
+fun loadObjects(
+    context: Context,
+    project: Project
+): List<GameObject> {
+
+    val preferences = context.getSharedPreferences(
+        "loco_engine",
+        Context.MODE_PRIVATE
+    )
+
+    val data = preferences.getString(
+        objectStorageKey(project),
+        null
+    )
+
+    if (data == null) {
+
+        return listOf(
+
+            GameObject(
+                id = 1,
+                name = "Main Camera",
+                type = "Camera",
+                x = 0f,
+                y = -80f
+            ),
+
+            GameObject(
+                id = 2,
+                name = "Directional Light",
+                type = "Light",
+                x = 80f,
+                y = -60f
+            )
+        )
+    }
+
+    return try {
+
+        val array = JSONArray(data)
+        val result = mutableListOf<GameObject>()
+
+        for (i in 0 until array.length()) {
+
+            val item = array.getJSONObject(i)
+
+            result.add(
+                GameObject(
+                    id = item.getInt("id"),
+                    name = item.getString("name"),
+                    type = item.getString("type"),
+                    x = item.optDouble("x", 0.0).toFloat(),
+                    y = item.optDouble("y", 0.0).toFloat(),
+                    rotation = item.optDouble(
+                        "rotation",
+                        0.0
+                    ).toFloat(),
+                    scale = item.optDouble(
+                        "scale",
+                        1.0
+                    ).toFloat()
+                )
+            )
+        }
+
+        result
+
+    } catch (e: Exception) {
+
+        emptyList()
+    }
+}
+
+
+fun saveObjects(
+    context: Context,
+    project: Project,
+    objects: List<GameObject>
+) {
+
+    val array = JSONArray()
+
+    for (obj in objects) {
+
+        val item = JSONObject()
+
+        item.put("id", obj.id)
+        item.put("name", obj.name)
+        item.put("type", obj.type)
+        item.put("x", obj.x)
+        item.put("y", obj.y)
+        item.put("rotation", obj.rotation)
+        item.put("scale", obj.scale)
+
+        array.put(item)
+    }
+
+    context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .putString(
+            objectStorageKey(project),
+            array.toString()
+        )
+        .apply()
+}
+
+
+/* =========================
+   MAIN APP
+   ========================= */
+
 @Composable
 fun LocoEngineApp(
     savedProjects: List<Project>,
-    initialLanguage: String
+    initialLanguage: String,
+    initialOpenedProject: Project?
 ) {
 
     val context =
@@ -196,69 +428,79 @@ fun LocoEngineApp(
         }
     }
 
-    /*
-     * تعديل 5:
-     * نستخدم rememberSaveable بدل remember
-     * حتى تبقى حالة المشروع عند تدوير الهاتف.
-     */
-
     var language by rememberSaveable {
         mutableStateOf(initialLanguage)
     }
 
-    var openedProjectName by rememberSaveable {
-        mutableStateOf<String?>(null)
-    }
-
-    var openedProjectType by rememberSaveable {
-        mutableStateOf<String?>(null)
-    }
-
-    if (
-        openedProjectName != null &&
-        openedProjectType != null
-    ) {
-
-        val openedProject = Project(
-            name = openedProjectName!!,
-            type = openedProjectType!!
+    var openedProject by rememberSaveable(
+        saver = androidx.compose.runtime.saveable.Saver(
+            save = {
+                if (it == null) {
+                    null
+                } else {
+                    listOf(
+                        it.name,
+                        it.type
+                    )
+                }
+            },
+            restore = {
+                if (it == null) {
+                    null
+                } else {
+                    Project(
+                        name = it[0],
+                        type = it[1]
+                    )
+                }
+            }
         )
+    ) {
+        mutableStateOf(initialOpenedProject)
+    }
+
+    if (openedProject != null) {
 
         EditorScreen(
-            project = openedProject,
+            project = openedProject!!,
             language = language,
 
-            onLanguageChange = { newLanguage ->
+            onLanguageChange = {
 
-                language = newLanguage
+                language = it
 
                 saveLanguage(
                     context,
-                    newLanguage
+                    it
                 )
             },
 
             onBack = {
 
-                openedProjectName = null
-                openedProjectType = null
+                openedProject = null
+
+                saveOpenedProject(
+                    context,
+                    null
+                )
             }
         )
 
         return
     }
 
+
     HomeScreen(
         projects = projects,
         language = language,
 
-        onLanguageChange = { newLanguage ->
+        onLanguageChange = {
 
-            language = newLanguage
+            language = it
 
             saveLanguage(
                 context,
-                newLanguage
+                it
             )
         },
 
@@ -277,15 +519,19 @@ fun LocoEngineApp(
             )
         },
 
-        onOpenProject = { project ->
+        onOpenProject = {
 
-            openedProjectName = project.name
-            openedProjectType = project.type
+            openedProject = it
+
+            saveOpenedProject(
+                context,
+                it
+            )
         },
 
-        onDeleteProject = { project ->
+        onDeleteProject = {
 
-            projects.remove(project)
+            projects.remove(it)
 
             saveProjects(
                 context,
@@ -294,6 +540,11 @@ fun LocoEngineApp(
         }
     )
 }
+
+
+/* =========================
+   HOME
+   ========================= */
 
 @Composable
 fun HomeScreen(
@@ -329,15 +580,18 @@ fun HomeScreen(
                     onClick = {
 
                         if (language == "en") {
+
                             onLanguageChange("ar")
+
                         } else {
+
                             onLanguageChange("en")
                         }
                     }
                 ) {
 
                     Text(
-                        text = if (language == "en") {
+                        if (language == "en") {
                             "العربية"
                         } else {
                             "English"
@@ -346,9 +600,11 @@ fun HomeScreen(
                 }
             }
 
+
             Spacer(
                 modifier = Modifier.height(25.dp)
             )
+
 
             Text(
                 text = "LOCO ENGINE",
@@ -356,9 +612,11 @@ fun HomeScreen(
                 fontSize = 32.sp
             )
 
+
             Spacer(
                 modifier = Modifier.height(8.dp)
             )
+
 
             Text(
                 text = text(
@@ -370,9 +628,11 @@ fun HomeScreen(
                 fontSize = 18.sp
             )
 
+
             Spacer(
                 modifier = Modifier.height(30.dp)
             )
+
 
             Button(
                 onClick = {
@@ -389,9 +649,11 @@ fun HomeScreen(
                 )
             }
 
+
             Spacer(
                 modifier = Modifier.height(30.dp)
             )
+
 
             Text(
                 text = text(
@@ -403,9 +665,11 @@ fun HomeScreen(
                 fontSize = 20.sp
             )
 
+
             Spacer(
                 modifier = Modifier.height(12.dp)
             )
+
 
             if (projects.isEmpty()) {
 
@@ -443,6 +707,7 @@ fun HomeScreen(
             }
         }
 
+
         if (showCreateDialog) {
 
             CreateProjectDialog(
@@ -465,6 +730,11 @@ fun HomeScreen(
         }
     }
 }
+
+
+/* =========================
+   PROJECT CARD
+   ========================= */
 
 @Composable
 fun ProjectCard(
@@ -509,7 +779,8 @@ fun ProjectCard(
         )
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
         ) {
 
             Button(
@@ -542,9 +813,11 @@ fun ProjectCard(
         }
     }
 
+
     Spacer(
         modifier = Modifier.height(8.dp)
     )
+
 
     if (showDeleteDialog) {
 
@@ -618,6 +891,11 @@ fun ProjectCard(
     }
 }
 
+
+/* =========================
+   CREATE PROJECT
+   ========================= */
+
 @Composable
 fun CreateProjectDialog(
     language: String,
@@ -671,9 +949,11 @@ fun CreateProjectDialog(
                     }
                 )
 
+
                 Spacer(
                     modifier = Modifier.height(15.dp)
                 )
+
 
                 Text(
                     text = text(
@@ -683,12 +963,15 @@ fun CreateProjectDialog(
                     )
                 )
 
+
                 Spacer(
                     modifier = Modifier.height(8.dp)
                 )
 
+
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
                 ) {
 
                     Button(
@@ -708,9 +991,11 @@ fun CreateProjectDialog(
                     }
                 }
 
+
                 Spacer(
                     modifier = Modifier.height(8.dp)
                 )
+
 
                 Text(
                     text = text(
@@ -765,6 +1050,11 @@ fun CreateProjectDialog(
     )
 }
 
+
+/* =========================
+   EDITOR
+   ========================= */
+
 @Composable
 fun EditorScreen(
     project: Project,
@@ -773,154 +1063,430 @@ fun EditorScreen(
     onBack: () -> Unit
 ) {
 
-    /*
-     * تعديل 1:
-     * الأدوات أصبحت محفوظة أثناء إعادة إنشاء الشاشة.
-     */
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
 
-    var selectedTool by rememberSaveable {
-        mutableStateOf("SELECT")
+    val objects = remember(project.name) {
+
+        mutableStateListOf<GameObject>().apply {
+
+            addAll(
+                loadObjects(
+                    context,
+                    project
+                )
+            )
+        }
     }
 
-    /*
-     * تعديل 2:
-     * العنصر المحدد محفوظ أثناء تدوير الشاشة.
-     */
 
     var selectedObjectId by rememberSaveable {
         mutableStateOf<Int?>(null)
     }
 
-    /*
-     * تعديل 3:
-     * قائمة العناصر الأساسية.
-     */
 
-    val objects = remember {
-
-        mutableStateListOf(
-
-            GameObject(
-                id = 1,
-                name = "Main Camera",
-                type = "Camera"
-            ),
-
-            GameObject(
-                id = 2,
-                name = "Directional Light",
-                type = "Light"
-            )
-        )
+    var selectedTool by rememberSaveable {
+        mutableStateOf("SELECT")
     }
 
-    /*
-     * تعديل 4:
-     * نافذة إضافة العناصر.
-     */
 
     var showObjectDialog by remember {
         mutableStateOf(false)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF111827))
+
+    fun saveCurrentObjects() {
+
+        saveObjects(
+            context,
+            project,
+            objects.toList()
+        )
+    }
+
+
+    fun updateObject(
+        id: Int,
+        update: (GameObject) -> GameObject
     ) {
 
-        EditorTopBar(
-            project = project,
-            language = language,
+        val index = objects.indexOfFirst {
+            it.id == id
+        }
 
-            onLanguageChange = onLanguageChange,
+        if (index >= 0) {
 
-            onBack = onBack
-        )
+            objects[index] =
+                update(objects[index])
 
-        EditorToolBar(
-            selectedTool = selectedTool,
-            language = language,
+            saveCurrentObjects()
+        }
+    }
 
-            onToolSelected = {
-                selectedTool = it
-            }
-        )
 
-        Row(
-            modifier = Modifier.fillMaxSize()
-        ) {
+    fun rotateSelected() {
 
-            SceneTree(
-                objects = objects,
-                selectedObjectId = selectedObjectId,
-                language = language,
+        val id = selectedObjectId
+            ?: return
 
-                onSelect = {
-                    selectedObjectId = it
-                },
+        updateObject(id) {
 
-                onAddObject = {
-                    showObjectDialog = true
-                }
-            )
-
-            EditorViewport(
-                project = project,
-                selectedTool = selectedTool,
-                selectedObjectId = selectedObjectId,
-                objects = objects,
-                language = language
-            )
-
-            InspectorPanel(
-                objects = objects,
-                selectedObjectId = selectedObjectId,
-                language = language
+            it.copy(
+                rotation =
+                    (it.rotation + 15f) % 360f
             )
         }
     }
 
-    if (showObjectDialog) {
 
-        AddObjectDialog(
-            language = language,
+    fun scaleSelected(amount: Float) {
 
-            onCancel = {
-                showObjectDialog = false
-            },
+        val id = selectedObjectId
+            ?: return
 
-            onAdd = { objectType ->
+        updateObject(id) {
 
-                val newId =
-                    (objects.maxOfOrNull { it.id } ?: 0) + 1
+            it.copy(
+                scale = (
+                    it.scale + amount
+                ).coerceIn(
+                    0.4f,
+                    3f
+                )
+            )
+        }
+    }
 
-                val objectName = when (objectType) {
 
-                    "Cube" -> "Cube $newId"
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize()
+    ) {
 
-                    "Sphere" -> "Sphere $newId"
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF111827))
+        ) {
 
-                    "Camera" -> "Camera $newId"
+            EditorTopBar(
+                project = project,
+                language = language,
 
-                    else -> "Light $newId"
+                onLanguageChange =
+                    onLanguageChange,
+
+                onBack = onBack
+            )
+
+
+            EditorToolBar(
+                selectedTool = selectedTool,
+                language = language,
+
+                onToolSelected = {
+                    selectedTool = it
+                },
+
+                onRotate = {
+                    rotateSelected()
+                },
+
+                onScaleUp = {
+                    scaleSelected(0.2f)
+                },
+
+                onScaleDown = {
+                    scaleSelected(-0.2f)
+                }
+            )
+
+
+            if (maxWidth > 700.dp) {
+
+                /* LANDSCAPE */
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+
+                    SceneTree(
+                        objects = objects,
+                        selectedObjectId =
+                            selectedObjectId,
+
+                        language = language,
+
+                        onSelect = {
+                            selectedObjectId = it
+                        },
+
+                        onAddObject = {
+                            showObjectDialog = true
+                        }
+                    )
+
+
+                    EditorViewport(
+                        project = project,
+                        objects = objects,
+                        selectedObjectId =
+                            selectedObjectId,
+
+                        selectedTool = selectedTool,
+                        language = language,
+
+                        onSelect = {
+                            selectedObjectId = it
+                        },
+
+                        onMove = { id, dx, dy ->
+
+                            updateObject(id) {
+
+                                it.copy(
+                                    x = it.x + dx,
+                                    y = it.y + dy
+                                )
+                            }
+                        }
+                    )
+
+
+                    InspectorPanel(
+                        objects = objects,
+                        selectedObjectId =
+                            selectedObjectId,
+
+                        language = language,
+
+                        onDelete = { id ->
+
+                            objects.removeAll {
+                                it.id == id
+                            }
+
+                            selectedObjectId = null
+
+                            saveCurrentObjects()
+                        },
+
+                        onDuplicate = { id ->
+
+                            val original =
+                                objects.firstOrNull {
+                                    it.id == id
+                                }
+
+                            if (original != null) {
+
+                                val newId =
+                                    (
+                                        objects.maxOfOrNull {
+                                            it.id
+                                        } ?: 0
+                                    ) + 1
+
+                                val copy =
+                                    original.copy(
+                                        id = newId,
+                                        name =
+                                            "${original.name} Copy",
+                                        x =
+                                            original.x + 30f,
+                                        y =
+                                            original.y + 30f
+                                    )
+
+                                objects.add(copy)
+
+                                selectedObjectId =
+                                    newId
+
+                                saveCurrentObjects()
+                            }
+                        }
+                    )
                 }
 
-                objects.add(
-                    GameObject(
-                        id = newId,
-                        name = objectName,
-                        type = objectType
+            } else {
+
+                /* PORTRAIT */
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+
+                    SceneTree(
+                        objects = objects,
+                        selectedObjectId =
+                            selectedObjectId,
+
+                        language = language,
+
+                        onSelect = {
+                            selectedObjectId = it
+                        },
+
+                        onAddObject = {
+                            showObjectDialog = true
+                        },
+
+                        compact = true
                     )
-                )
 
-                selectedObjectId = newId
 
-                showObjectDialog = false
+                    EditorViewport(
+                        project = project,
+                        objects = objects,
+                        selectedObjectId =
+                            selectedObjectId,
+
+                        selectedTool = selectedTool,
+                        language = language,
+
+                        onSelect = {
+                            selectedObjectId = it
+                        },
+
+                        onMove = { id, dx, dy ->
+
+                            updateObject(id) {
+
+                                it.copy(
+                                    x = it.x + dx,
+                                    y = it.y + dy
+                                )
+                            },
+
+                        compact = true
+                    )
+
+
+                    InspectorPanel(
+                        objects = objects,
+                        selectedObjectId =
+                            selectedObjectId,
+
+                        language = language,
+
+                        onDelete = { id ->
+
+                            objects.removeAll {
+                                it.id == id
+                            }
+
+                            selectedObjectId = null
+
+                            saveCurrentObjects()
+                        },
+
+                        onDuplicate = { id ->
+
+                            val original =
+                                objects.firstOrNull {
+                                    it.id == id
+                                }
+
+                            if (original != null) {
+
+                                val newId =
+                                    (
+                                        objects.maxOfOrNull {
+                                            it.id
+                                        } ?: 0
+                                    ) + 1
+
+                                objects.add(
+                                    original.copy(
+                                        id = newId,
+                                        name =
+                                            "${original.name} Copy",
+                                        x =
+                                            original.x + 30f,
+                                        y =
+                                            original.y + 30f
+                                    )
+                                )
+
+                                selectedObjectId =
+                                    newId
+
+                                saveCurrentObjects()
+                            }
+                        },
+
+                        compact = true
+                    )
+                }
             }
-        )
+        }
+
+
+        if (showObjectDialog) {
+
+            AddObjectDialog(
+                language = language,
+
+                onCancel = {
+                    showObjectDialog = false
+                },
+
+                onAdd = { objectType ->
+
+                    val newId =
+                        (
+                            objects.maxOfOrNull {
+                                it.id
+                            } ?: 0
+                        ) + 1
+
+                    val objectName =
+                        when (objectType) {
+
+                            "Cube" ->
+                                "Cube $newId"
+
+                            "Sphere" ->
+                                "Sphere $newId"
+
+                            "Camera" ->
+                                "Camera $newId"
+
+                            else ->
+                                "Light $newId"
+                        }
+
+
+                    objects.add(
+                        GameObject(
+                            id = newId,
+                            name = objectName,
+                            type = objectType,
+                            x = 0f,
+                            y = 0f
+                        )
+                    )
+
+
+                    selectedObjectId =
+                        newId
+
+                    showObjectDialog =
+                        false
+
+                    saveCurrentObjects()
+                }
+            )
+        }
     }
 }
+
+
+/* =========================
+   TOP BAR
+   ========================= */
 
 @Composable
 fun EditorTopBar(
@@ -936,8 +1502,11 @@ fun EditorTopBar(
             .background(Color(0xFF0F172A))
             .padding(6.dp),
 
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement =
+            Arrangement.SpaceBetween,
+
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
 
         TextButton(
@@ -953,14 +1522,17 @@ fun EditorTopBar(
             )
         }
 
+
         Text(
             text = project.name,
             color = Color.White,
             fontSize = 17.sp
         )
 
+
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement =
+                Arrangement.spacedBy(4.dp)
         ) {
 
             Text(
@@ -968,12 +1540,16 @@ fun EditorTopBar(
                 color = Color(0xFF00E5FF)
             )
 
+
             TextButton(
                 onClick = {
 
                     if (language == "en") {
+
                         onLanguageChange("ar")
+
                     } else {
+
                         onLanguageChange("en")
                     }
                 }
@@ -991,83 +1567,164 @@ fun EditorTopBar(
     }
 }
 
+
+/* =========================
+   TOOL BAR
+   ========================= */
+
 @Composable
 fun EditorToolBar(
     selectedTool: String,
     language: String,
-    onToolSelected: (String) -> Unit
+    onToolSelected: (String) -> Unit,
+    onRotate: () -> Unit,
+    onScaleUp: () -> Unit,
+    onScaleDown: () -> Unit
 ) {
 
-    Row(
+    LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
+            .height(105.dp)
             .background(Color(0xFF1E293B))
-            .padding(6.dp),
-
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
+            .padding(5.dp)
     ) {
 
-        val tools = listOf(
-            "SELECT",
-            "MOVE",
-            "ROTATE",
-            "SCALE"
-        )
+        item {
 
-        tools.forEach { tool ->
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(5.dp)
+            ) {
 
-            val translated = when (tool) {
-
-                "SELECT" -> text(
-                    language,
+                val tools = listOf(
                     "SELECT",
-                    "تحديد"
-                )
-
-                "MOVE" -> text(
-                    language,
                     "MOVE",
-                    "تحريك"
-                )
-
-                "ROTATE" -> text(
-                    language,
                     "ROTATE",
-                    "تدوير"
+                    "SCALE"
                 )
 
-                else -> text(
-                    language,
-                    "SCALE",
-                    "تحجيم"
-                )
+
+                tools.forEach { tool ->
+
+                    val translated =
+                        when (tool) {
+
+                            "SELECT" ->
+                                text(
+                                    language,
+                                    "SELECT",
+                                    "تحديد"
+                                )
+
+                            "MOVE" ->
+                                text(
+                                    language,
+                                    "MOVE",
+                                    "تحريك"
+                                )
+
+                            "ROTATE" ->
+                                text(
+                                    language,
+                                    "ROTATE",
+                                    "تدوير"
+                                )
+
+                            else ->
+                                text(
+                                    language,
+                                    "SCALE",
+                                    "تحجيم"
+                                )
+                        }
+
+
+                    if (tool == selectedTool) {
+
+                        Button(
+                            onClick = {
+                                onToolSelected(tool)
+                            }
+                        ) {
+
+                            Text(translated)
+                        }
+
+                    } else {
+
+                        OutlinedButton(
+                            onClick = {
+                                onToolSelected(tool)
+                            }
+                        ) {
+
+                            Text(translated)
+                        }
+                    }
+                }
             }
 
-            if (tool == selectedTool) {
+
+            Spacer(
+                modifier = Modifier.height(5.dp)
+            )
+
+
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(5.dp)
+            ) {
 
                 Button(
-                    onClick = {
-                        onToolSelected(tool)
-                    }
+                    onClick = onRotate
                 ) {
 
-                    Text(translated)
+                    Text(
+                        text = text(
+                            language,
+                            "⟳ +15°",
+                            "⟳ +15°"
+                        )
+                    )
                 }
 
-            } else {
 
-                OutlinedButton(
-                    onClick = {
-                        onToolSelected(tool)
-                    }
+                Button(
+                    onClick = onScaleUp
                 ) {
 
-                    Text(translated)
+                    Text(
+                        text = text(
+                            language,
+                            "SCALE +",
+                            "تكبير +"
+                        )
+                    )
+                }
+
+
+                Button(
+                    onClick = onScaleDown
+                ) {
+
+                    Text(
+                        text = text(
+                            language,
+                            "SCALE -",
+                            "تصغير -"
+                        )
+                    )
                 }
             }
         }
     }
 }
+
+
+/* =========================
+   SCENE TREE
+   ========================= */
 
 @Composable
 fun SceneTree(
@@ -1075,15 +1732,27 @@ fun SceneTree(
     selectedObjectId: Int?,
     language: String,
     onSelect: (Int) -> Unit,
-    onAddObject: () -> Unit
+    onAddObject: () -> Unit,
+    compact: Boolean = false
 ) {
 
     Column(
-        modifier = Modifier
-            .width(160.dp)
-            .fillMaxSize()
-            .background(Color(0xFF0B1220))
-            .padding(8.dp)
+        modifier = if (compact) {
+
+            Modifier
+                .fillMaxWidth()
+                .height(130.dp)
+                .background(Color(0xFF0B1220))
+                .padding(8.dp)
+
+        } else {
+
+            Modifier
+                .width(170.dp)
+                .fillMaxHeight()
+                .background(Color(0xFF0B1220))
+                .padding(8.dp)
+        }
     ) {
 
         Text(
@@ -1096,9 +1765,11 @@ fun SceneTree(
             fontSize = 18.sp
         )
 
+
         Spacer(
-            modifier = Modifier.height(8.dp)
+            modifier = Modifier.height(5.dp)
         )
+
 
         Button(
             onClick = onAddObject,
@@ -1114,9 +1785,11 @@ fun SceneTree(
             )
         }
 
+
         Spacer(
-            modifier = Modifier.height(8.dp)
+            modifier = Modifier.height(5.dp)
         )
+
 
         LazyColumn {
 
@@ -1130,26 +1803,33 @@ fun SceneTree(
                 val selected =
                     obj.id == selectedObjectId
 
+
                 Text(
                     text = obj.name,
 
-                    color = if (selected) {
-                        Color(0xFF00E5FF)
-                    } else {
-                        Color.White
-                    },
+                    color =
+                        if (selected) {
+                            Color(0xFF00E5FF)
+                        } else {
+                            Color.White
+                        },
 
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
                             onSelect(obj.id)
                         }
-                        .padding(10.dp)
+                        .padding(7.dp)
                 )
             }
         }
     }
 }
+
+
+/* =========================
+   OBJECT DIALOG
+   ========================= */
 
 @Composable
 fun AddObjectDialog(
@@ -1178,40 +1858,39 @@ fun AddObjectDialog(
             Column {
 
                 ObjectButton(
-                    name = "Cube",
-                    arabicName = "مكعب",
-                    language = language,
-                    onClick = {
-                        onAdd("Cube")
-                    }
-                )
+                    "Cube",
+                    "مكعب",
+                    language
+                ) {
+                    onAdd("Cube")
+                }
+
 
                 ObjectButton(
-                    name = "Sphere",
-                    arabicName = "كرة",
-                    language = language,
-                    onClick = {
-                        onAdd("Sphere")
-                    }
-                )
+                    "Sphere",
+                    "كرة",
+                    language
+                ) {
+                    onAdd("Sphere")
+                }
+
 
                 ObjectButton(
-                    name = "Camera",
-                    arabicName = "كاميرا",
-                    language = language,
-                    onClick = {
-                        onAdd("Camera")
-                    }
-                )
+                    "Camera",
+                    "كاميرا",
+                    language
+                ) {
+                    onAdd("Camera")
+                }
+
 
                 ObjectButton(
-                    name = "Light",
-                    arabicName = "ضوء",
-                    language = language,
-                    onClick = {
-                        onAdd("Light")
-                    }
-                )
+                    "Light",
+                    "ضوء",
+                    language
+                ) {
+                    onAdd("Light")
+                }
             }
         },
 
@@ -1232,6 +1911,11 @@ fun AddObjectDialog(
         }
     )
 }
+
+
+/* =========================
+   OBJECT BUTTON
+   ========================= */
 
 @Composable
 fun ObjectButton(
@@ -1255,133 +1939,198 @@ fun ObjectButton(
         )
     }
 
+
     Spacer(
-        modifier = Modifier.height(6.dp)
+        modifier = Modifier.height(5.dp)
     )
 }
+
+
+/* =========================
+   VIEWPORT
+   ========================= */
 
 @Composable
 fun EditorViewport(
     project: Project,
-    selectedTool: String,
-    selectedObjectId: Int?,
     objects: List<GameObject>,
-    language: String
+    selectedObjectId: Int?,
+    selectedTool: String,
+    language: String,
+    onSelect: (Int) -> Unit,
+    onMove: (Int, Float, Float) -> Unit,
+    compact: Boolean = false
 ) {
 
-    val selectedObject =
-        objects.firstOrNull {
-            it.id == selectedObjectId
-        }
-
     Box(
-        modifier = Modifier
-            .width(300.dp)
-            .fillMaxSize()
-            .background(Color(0xFF182233))
-            .border(
-                width = 1.dp,
-                color = Color(0xFF334155)
-            ),
+        modifier = if (compact) {
 
-        contentAlignment = Alignment.Center
+            Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+                .background(Color(0xFF182233))
+                .border(
+                    1.dp,
+                    Color(0xFF334155)
+                )
+
+        } else {
+
+            Modifier
+                .fillMaxHeight()
+                .weight(1f)
+                .background(Color(0xFF182233))
+                .border(
+                    1.dp,
+                    Color(0xFF334155)
+                )
+        }
     ) {
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Text(
+            text = text(
+                language,
+                "${project.type} VIEWPORT",
+                "نافذة ${project.type}"
+            ),
+            color = Color(0xFF00E5FF),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(8.dp)
+        )
 
-            Text(
-                text = text(
-                    language,
-                    "${project.type} VIEWPORT",
-                    "نافذة ${project.type}"
-                ),
-                color = Color(0xFF00E5FF),
-                fontSize = 22.sp
+
+        Text(
+            text = "┼",
+            color = Color(0xFF334155),
+            fontSize = 70.sp,
+            modifier = Modifier.align(
+                Alignment.Center
             )
+        )
 
-            Spacer(
-                modifier = Modifier.height(15.dp)
-            )
 
-            Text(
-                text = "┼",
-                color = Color(0xFF00E5FF),
-                fontSize = 45.sp
-            )
+        objects.forEach { obj ->
 
-            Spacer(
-                modifier = Modifier.height(10.dp)
-            )
+            val isSelected =
+                obj.id == selectedObjectId
 
-            Text(
-                text = "X  ─────────  Z",
-                color = Color(0xFF64748B),
-                fontSize = 16.sp
-            )
 
-            Spacer(
-                modifier = Modifier.height(15.dp)
-            )
+            val size =
+                (48f * obj.scale)
+                    .coerceIn(25f, 130f)
 
-            Text(
-                text = text(
-                    language,
-                    "Scene Grid",
-                    "شبكة المشهد"
-                ),
-                color = Color(0xFF64748B)
-            )
 
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .offset {
 
-            Text(
-                text = text(
-                    language,
-                    "Tool: $selectedTool",
-                    "الأداة: $selectedTool"
-                ),
-                color = Color.White
-            )
+                        IntOffset(
+                            obj.x.roundToInt(),
+                            obj.y.roundToInt()
+                        )
+                    }
+                    .width(size.dp)
+                    .height(size.dp)
+                    .background(
+                        if (isSelected) {
+                            Color(0xFF00E5FF)
+                        } else {
+                            Color(0xFF475569)
+                        }
+                    )
+                    .border(
+                        width =
+                            if (isSelected) {
+                                3.dp
+                            } else {
+                                1.dp
+                            },
+                        color = Color.White
+                    )
+                    .clickable {
 
-            Spacer(
-                modifier = Modifier.height(15.dp)
-            )
+                        onSelect(obj.id)
+                    }
+                    .pointerInput(
+                        obj.id,
+                        selectedTool
+                    ) {
 
-            if (selectedObject != null) {
+                        if (
+                            selectedTool == "MOVE"
+                        ) {
 
-                Text(
-                    text = text(
-                        language,
-                        "Selected: ${selectedObject.name}",
-                        "المحدد: ${selectedObject.name}"
-                    ),
-                    color = Color(0xFF00E5FF)
-                )
+                            detectDragGestures {
 
-            } else {
+                                change,
+                                dragAmount ->
 
-                Text(
-                    text = text(
-                        language,
-                        "Select an object",
-                        "حدد عنصرًا"
-                    ),
-                    color = Color.Gray
-                )
+                                change.consume()
+
+                                onMove(
+                                    obj.id,
+                                    dragAmount.x,
+                                    dragAmount.y
+                                )
+                            }
+                        }
+                    }
+                    .align(Alignment.Center)
+            ) {
+
+                Column(
+                    modifier =
+                        Modifier.fillMaxSize(),
+
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally,
+
+                    verticalArrangement =
+                        Arrangement.Center
+                ) {
+
+                    Text(
+                        text = when (obj.type) {
+
+                            "Cube" -> "⬛"
+
+                            "Sphere" -> "●"
+
+                            "Camera" -> "📷"
+
+                            else -> "💡"
+                        },
+
+                        fontSize = 22.sp,
+                        color = Color.White
+                    )
+
+
+                    Text(
+                        text = obj.name,
+                        fontSize = 8.sp,
+                        color = Color.White
+                    )
+                }
             }
         }
     }
 }
 
+
+/* =========================
+   INSPECTOR
+   ========================= */
+
 @Composable
 fun InspectorPanel(
     objects: List<GameObject>,
     selectedObjectId: Int?,
-    language: String
+    language: String,
+    onDelete: (Int) -> Unit,
+    onDuplicate: (Int) -> Unit,
+    compact: Boolean = false
 ) {
 
     val selectedObject =
@@ -1389,12 +2138,24 @@ fun InspectorPanel(
             it.id == selectedObjectId
         }
 
+
     Column(
-        modifier = Modifier
-            .width(180.dp)
-            .fillMaxSize()
-            .background(Color(0xFF0B1220))
-            .padding(10.dp)
+        modifier = if (compact) {
+
+            Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+                .background(Color(0xFF0B1220))
+                .padding(10.dp)
+
+        } else {
+
+            Modifier
+                .width(190.dp)
+                .fillMaxHeight()
+                .background(Color(0xFF0B1220))
+                .padding(10.dp)
+        }
     ) {
 
         Text(
@@ -1407,9 +2168,11 @@ fun InspectorPanel(
             fontSize = 18.sp
         )
 
+
         Spacer(
-            modifier = Modifier.height(15.dp)
+            modifier = Modifier.height(8.dp)
         )
+
 
         if (selectedObject == null) {
 
@@ -1427,12 +2190,9 @@ fun InspectorPanel(
             Text(
                 text = selectedObject.name,
                 color = Color.White,
-                fontSize = 18.sp
+                fontSize = 17.sp
             )
 
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
 
             Text(
                 text = text(
@@ -1443,22 +2203,11 @@ fun InspectorPanel(
                 color = Color.Gray
             )
 
-            Spacer(
-                modifier = Modifier.height(20.dp)
-            )
-
-            Text(
-                text = text(
-                    language,
-                    "TRANSFORM",
-                    "التحويل"
-                ),
-                color = Color(0xFF00E5FF)
-            )
 
             Spacer(
-                modifier = Modifier.height(10.dp)
+                modifier = Modifier.height(7.dp)
             )
+
 
             Text(
                 text = text(
@@ -1469,41 +2218,88 @@ fun InspectorPanel(
                 color = Color.White
             )
 
-            Text("X: 0.0")
-            Text("Y: 0.0")
-            Text("Z: 0.0")
 
-            Spacer(
-                modifier = Modifier.height(12.dp)
+            Text(
+                "X: ${
+                    selectedObject.x.roundToInt()
+                }"
             )
+
+
+            Text(
+                "Y: ${
+                    selectedObject.y.roundToInt()
+                }"
+            )
+
 
             Text(
                 text = text(
                     language,
-                    "Rotation",
-                    "الدوران"
+                    "Rotation: ${selectedObject.rotation.roundToInt()}°",
+                    "الدوران: ${selectedObject.rotation.roundToInt()}°"
                 )
             )
 
-            Text("X: 0°")
-            Text("Y: 0°")
-            Text("Z: 0°")
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
-            )
 
             Text(
                 text = text(
                     language,
-                    "Scale",
-                    "الحجم"
+                    "Scale: %.1f".format(
+                        selectedObject.scale
+                    ),
+                    "الحجم: %.1f".format(
+                        selectedObject.scale
+                    )
                 )
             )
 
-            Text("X: 1.0")
-            Text("Y: 1.0")
-            Text("Z: 1.0")
+
+            Spacer(
+                modifier = Modifier.height(8.dp)
+            )
+
+
+            Row(
+                horizontalArrangement =
+                    Arrangement.spacedBy(5.dp)
+            ) {
+
+                Button(
+                    onClick = {
+                        onDuplicate(
+                            selectedObject.id
+                        )
+                    }
+                ) {
+
+                    Text(
+                        text = text(
+                            language,
+                            "DUP",
+                            "نسخ"
+                        )
+                    )
+                }
+
+
+                OutlinedButton(
+                    onClick = {
+                        onDelete(
+                            selectedObject.id
+                        )
+                    }
+                ) {
+
+                    Text(
+                        text = text(
+                            language,
+                            "DELETE",
+                            "حذف"
+                        )
+                    )
+                }
+            }
         }
     }
 }
