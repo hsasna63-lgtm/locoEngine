@@ -9,22 +9,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -40,13 +34,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
+
 
 class MainActivity : ComponentActivity() {
 
@@ -65,16 +58,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
 data class Project(
     val name: String,
     val type: String
 )
+
 
 data class GameObject(
     val id: Int,
     val name: String,
     val type: String
 )
+
 
 fun loadProjects(context: Context): List<Project> {
 
@@ -113,6 +109,7 @@ fun loadProjects(context: Context): List<Project> {
     }
 }
 
+
 fun saveProjects(
     context: Context,
     projects: List<Project>
@@ -143,6 +140,7 @@ fun saveProjects(
         .apply()
 }
 
+
 fun loadLanguage(context: Context): String {
 
     return context
@@ -155,6 +153,7 @@ fun loadLanguage(context: Context): String {
             "en"
         ) ?: "en"
 }
+
 
 fun saveLanguage(
     context: Context,
@@ -174,6 +173,7 @@ fun saveLanguage(
         .apply()
 }
 
+
 fun text(
     language: String,
     english: String,
@@ -186,6 +186,7 @@ fun text(
         english
     }
 }
+
 
 @Composable
 fun LocoEngineApp(
@@ -280,6 +281,7 @@ fun LocoEngineApp(
         }
     )
 }
+
 
 @Composable
 fun HomeScreen(
@@ -452,6 +454,7 @@ fun HomeScreen(
     }
 }
 
+
 @Composable
 fun ProjectCard(
     project: Project,
@@ -604,6 +607,7 @@ fun ProjectCard(
     }
 }
 
+
 @Composable
 fun CreateProjectDialog(
     language: String,
@@ -751,6 +755,7 @@ fun CreateProjectDialog(
     )
 }
 
+
 @Composable
 fun EditorScreen(
     project: Project,
@@ -831,14 +836,8 @@ fun EditorScreen(
 
             EditorViewport(
                 project = project,
-                objects = objects,
-                selectedObjectId = selectedObjectId,
                 selectedTool = selectedTool,
-                language = language,
-
-                onSelectObject = {
-                    selectedObjectId = it
-                }
+                language = language
             )
 
             InspectorPanel(
@@ -865,21 +864,13 @@ fun EditorScreen(
 
                 val objectName = when (objectType) {
 
-                    "Cube" -> {
-                        "Cube $newId"
-                    }
+                    "Cube" -> "Cube $newId"
 
-                    "Sphere" -> {
-                        "Sphere $newId"
-                    }
+                    "Sphere" -> "Sphere $newId"
 
-                    "Camera" -> {
-                        "Camera $newId"
-                    }
+                    "Camera" -> "Camera $newId"
 
-                    else -> {
-                        "Light $newId"
-                    }
+                    else -> "Light $newId"
                 }
 
                 objects.add(
@@ -897,6 +888,7 @@ fun EditorScreen(
         )
     }
 }
+
 
 @Composable
 fun EditorTopBar(
@@ -967,6 +959,7 @@ fun EditorTopBar(
     }
 }
 
+
 @Composable
 fun EditorToolBar(
     selectedTool: String,
@@ -1026,6 +1019,7 @@ fun EditorToolBar(
                         onToolSelected(tool)
                     }
                 ) {
+
                     Text(translated)
                 }
 
@@ -1036,12 +1030,14 @@ fun EditorToolBar(
                         onToolSelected(tool)
                     }
                 ) {
+
                     Text(translated)
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun SceneTree(
@@ -1054,7 +1050,7 @@ fun SceneTree(
 
     Column(
         modifier = Modifier
-            .width(145.dp)
+            .width(160.dp)
             .fillMaxSize()
             .background(Color(0xFF0B1220))
             .padding(8.dp)
@@ -1084,8 +1080,7 @@ fun SceneTree(
                     language,
                     "+ OBJECT",
                     "+ عنصر"
-                ),
-                fontSize = 12.sp
+                )
             )
         }
 
@@ -1119,12 +1114,13 @@ fun SceneTree(
                         .clickable {
                             onSelect(obj.id)
                         }
-                        .padding(8.dp)
+                        .padding(10.dp)
                 )
             }
         }
     }
 }
+
 
 @Composable
 fun AddObjectDialog(
@@ -1208,6 +1204,7 @@ fun AddObjectDialog(
     )
 }
 
+
 @Composable
 fun ObjectButton(
     name: String,
@@ -1235,283 +1232,90 @@ fun ObjectButton(
     )
 }
 
+
 @Composable
 fun EditorViewport(
     project: Project,
-    objects: List<GameObject>,
-    selectedObjectId: Int?,
     selectedTool: String,
-    language: String,
-    onSelectObject: (Int) -> Unit
+    language: String
 ) {
 
     Box(
         modifier = Modifier
-            .weight(1f)
+            .width(300.dp)
             .fillMaxSize()
             .background(Color(0xFF182233))
             .border(
                 width = 1.dp,
                 color = Color(0xFF334155)
-            )
+            ),
+
+        contentAlignment = Alignment.Center
     ) {
 
-        BoxWithConstraints(
-            modifier = Modifier.fillMaxSize()
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
 
-            val centerX = maxWidth / 2
-            val centerY = maxHeight / 2
-
             Text(
-                text = "+",
-                color = Color(0xFF334155),
-                fontSize = 30.sp,
-                modifier = Modifier
-                    .offset(
-                        x = centerX - 10.dp,
-                        y = centerY - 25.dp
-                    )
+                text = text(
+                    language,
+                    "${project.type} VIEWPORT",
+                    "نافذة ${project.type}"
+                ),
+                color = Color(0xFF00E5FF),
+                fontSize = 22.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(15.dp)
             )
 
             Text(
-                text = "X",
+                text = "┼",
+                color = Color(0xFF00E5FF),
+                fontSize = 45.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(10.dp)
+            )
+
+            Text(
+                text = "X  ─────────  Z",
                 color = Color(0xFF64748B),
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .offset(
-                        x = maxWidth - 25.dp,
-                        y = centerY + 8.dp
-                    )
+                fontSize = 16.sp
+            )
+
+            Spacer(
+                modifier = Modifier.height(15.dp)
             )
 
             Text(
-                text = "Z",
-                color = Color(0xFF64748B),
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .offset(
-                        x = centerX + 8.dp,
-                        y = 8.dp
-                    )
+                text = text(
+                    language,
+                    "Scene Grid",
+                    "شبكة المشهد"
+                ),
+                color = Color(0xFF64748B)
             )
 
-            objects.forEachIndexed { index, obj ->
+            Spacer(
+                modifier = Modifier.height(12.dp)
+            )
 
-                val objectX =
-                    20.dp + ((index % 3) * 85).dp
-
-                val objectY =
-                    60.dp + ((index / 3) * 100).dp
-
-                ViewportObject(
-                    gameObject = obj,
-                    selected = obj.id == selectedObjectId,
-                    language = language,
-
-                    modifier = Modifier
-                        .offset(
-                            x = objectX,
-                            y = objectY
-                        ),
-
-                    onClick = {
-                        onSelectObject(obj.id)
-                    }
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(8.dp),
-
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
-            ) {
-
-                Text(
-                    text = text(
-                        language,
-                        "${project.type} VIEWPORT",
-                        "نافذة ${project.type}"
-                    ),
-                    color = Color(0xFF00E5FF),
-                    fontSize = 15.sp
-                )
-
-                Text(
-                    text = text(
-                        language,
-                        "Tool: $selectedTool",
-                        "الأداة: $selectedTool"
-                    ),
-                    color = Color.Gray,
-                    fontSize = 12.sp
-                )
-            }
+            Text(
+                text = text(
+                    language,
+                    "Tool: $selectedTool",
+                    "الأداة: $selectedTool"
+                ),
+                color = Color.White
+            )
         }
     }
 }
 
-@Composable
-fun ViewportObject(
-    gameObject: GameObject,
-    selected: Boolean,
-    language: String,
-    modifier: Modifier,
-    onClick: () -> Unit
-) {
-
-    val borderColor =
-        if (selected) {
-            Color(0xFF00E5FF)
-        } else {
-            Color(0xFF475569)
-        }
-
-    Column(
-        modifier = modifier
-            .width(75.dp)
-            .clickable {
-                onClick()
-            },
-
-        horizontalAlignment =
-            Alignment.CenterHorizontally
-    ) {
-
-        when (gameObject.type) {
-
-            "Cube" -> {
-
-                Box(
-                    modifier = Modifier
-                        .size(55.dp)
-                        .background(
-                            Color(0xFF3B82F6),
-                            RoundedCornerShape(5.dp)
-                        )
-                        .border(
-                            width = if (selected) 3.dp else 1.dp,
-                            color = borderColor,
-                            shape = RoundedCornerShape(5.dp)
-                        ),
-
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    Text(
-                        text = "◆",
-                        color = Color.White,
-                        fontSize = 22.sp
-                    )
-                }
-            }
-
-            "Sphere" -> {
-
-                Box(
-                    modifier = Modifier
-                        .size(55.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF8B5CF6))
-                        .border(
-                            width = if (selected) 3.dp else 1.dp,
-                            color = borderColor,
-                            shape = CircleShape
-                        ),
-
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    Text(
-                        text = "●",
-                        color = Color.White,
-                        fontSize = 22.sp
-                    )
-                }
-            }
-
-            "Camera" -> {
-
-                Box(
-                    modifier = Modifier
-                        .size(55.dp)
-                        .background(
-                            Color(0xFF334155),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .border(
-                            width = if (selected) 3.dp else 1.dp,
-                            color = borderColor,
-                            shape = RoundedCornerShape(8.dp)
-                        ),
-
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    Text(
-                        text = "📷",
-                        fontSize = 25.sp
-                    )
-                }
-            }
-
-            else -> {
-
-                Box(
-                    modifier = Modifier
-                        .size(55.dp)
-                        .background(
-                            Color(0xFF854D0E),
-                            CircleShape
-                        )
-                        .border(
-                            width = if (selected) 3.dp else 1.dp,
-                            color = borderColor,
-                            shape = CircleShape
-                        ),
-
-                    contentAlignment = Alignment.Center
-                ) {
-
-                    Text(
-                        text = "★",
-                        color = Color.Yellow,
-                        fontSize = 27.sp
-                    )
-                }
-            }
-        }
-
-        Spacer(
-            modifier = Modifier.height(4.dp)
-        )
-
-        Text(
-            text = if (language == "ar") {
-                when (gameObject.type) {
-                    "Cube" -> "مكعب"
-                    "Sphere" -> "كرة"
-                    "Camera" -> "كاميرا"
-                    else -> "ضوء"
-                }
-            } else {
-                gameObject.name
-            },
-
-            color = if (selected) {
-                Color(0xFF00E5FF)
-            } else {
-                Color.White
-            },
-
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
 
 @Composable
 fun InspectorPanel(
@@ -1527,7 +1331,7 @@ fun InspectorPanel(
 
     Column(
         modifier = Modifier
-            .width(165.dp)
+            .width(180.dp)
             .fillMaxSize()
             .background(Color(0xFF0B1220))
             .padding(10.dp)
