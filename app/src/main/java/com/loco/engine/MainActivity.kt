@@ -68,7 +68,16 @@ data class Project(
 data class GameObject(
     val id: Int,
     val name: String,
-    val type: String
+    val type: String,
+    val positionX: Float = 0f,
+    val positionY: Float = 0f,
+    val positionZ: Float = 0f,
+    val rotationX: Float = 0f,
+    val rotationY: Float = 0f,
+    val rotationZ: Float = 0f,
+    val scaleX: Float = 1f,
+    val scaleY: Float = 1f,
+    val scaleZ: Float = 1f
 )
 
 
@@ -188,6 +197,196 @@ fun text(
 }
 
 
+/* =========================================================
+   PROJECT OBJECT SAVE / LOAD
+   ========================================================= */
+
+fun sceneKey(project: Project): String {
+
+    return "scene_" +
+            project.name +
+            "_" +
+            project.type
+}
+
+
+fun saveScene(
+    context: Context,
+    project: Project,
+    objects: List<GameObject>
+) {
+
+    val array = JSONArray()
+
+    for (obj in objects) {
+
+        val item = JSONObject()
+
+        item.put("id", obj.id)
+        item.put("name", obj.name)
+        item.put("type", obj.type)
+
+        item.put("positionX", obj.positionX)
+        item.put("positionY", obj.positionY)
+        item.put("positionZ", obj.positionZ)
+
+        item.put("rotationX", obj.rotationX)
+        item.put("rotationY", obj.rotationY)
+        item.put("rotationZ", obj.rotationZ)
+
+        item.put("scaleX", obj.scaleX)
+        item.put("scaleY", obj.scaleY)
+        item.put("scaleZ", obj.scaleZ)
+
+        array.put(item)
+    }
+
+    context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .putString(
+            sceneKey(project),
+            array.toString()
+        )
+        .apply()
+}
+
+
+fun loadScene(
+    context: Context,
+    project: Project
+): List<GameObject> {
+
+    val data =
+        context
+            .getSharedPreferences(
+                "loco_engine",
+                Context.MODE_PRIVATE
+            )
+            .getString(
+                sceneKey(project),
+                null
+            )
+
+    if (data == null) {
+
+        return listOf(
+
+            GameObject(
+                id = 1,
+                name = "Main Camera",
+                type = "Camera"
+            ),
+
+            GameObject(
+                id = 2,
+                name = "Directional Light",
+                type = "Light"
+            )
+        )
+    }
+
+    return try {
+
+        val array = JSONArray(data)
+        val result = mutableListOf<GameObject>()
+
+        for (i in 0 until array.length()) {
+
+            val item = array.getJSONObject(i)
+
+            result.add(
+                GameObject(
+                    id = item.getInt("id"),
+                    name = item.getString("name"),
+                    type = item.getString("type"),
+
+                    positionX =
+                        item.optDouble(
+                            "positionX",
+                            0.0
+                        ).toFloat(),
+
+                    positionY =
+                        item.optDouble(
+                            "positionY",
+                            0.0
+                        ).toFloat(),
+
+                    positionZ =
+                        item.optDouble(
+                            "positionZ",
+                            0.0
+                        ).toFloat(),
+
+                    rotationX =
+                        item.optDouble(
+                            "rotationX",
+                            0.0
+                        ).toFloat(),
+
+                    rotationY =
+                        item.optDouble(
+                            "rotationY",
+                            0.0
+                        ).toFloat(),
+
+                    rotationZ =
+                        item.optDouble(
+                            "rotationZ",
+                            0.0
+                        ).toFloat(),
+
+                    scaleX =
+                        item.optDouble(
+                            "scaleX",
+                            1.0
+                        ).toFloat(),
+
+                    scaleY =
+                        item.optDouble(
+                            "scaleY",
+                            1.0
+                        ).toFloat(),
+
+                    scaleZ =
+                        item.optDouble(
+                            "scaleZ",
+                            1.0
+                        ).toFloat()
+                )
+            )
+        }
+
+        result
+
+    } catch (e: Exception) {
+
+        listOf(
+
+            GameObject(
+                id = 1,
+                name = "Main Camera",
+                type = "Camera"
+            ),
+
+            GameObject(
+                id = 2,
+                name = "Directional Light",
+                type = "Light"
+            )
+        )
+    }
+}
+
+
+/* =========================================================
+   MAIN APP
+   ========================================================= */
+
 @Composable
 fun LocoEngineApp(
     savedProjects: List<Project>,
@@ -282,6 +481,10 @@ fun LocoEngineApp(
     )
 }
 
+
+/* =========================================================
+   HOME
+   ========================================================= */
 
 @Composable
 fun HomeScreen(
@@ -455,6 +658,10 @@ fun HomeScreen(
 }
 
 
+/* =========================================================
+   PROJECT CARD
+   ========================================================= */
+
 @Composable
 fun ProjectCard(
     project: Project,
@@ -498,7 +705,8 @@ fun ProjectCard(
         )
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
         ) {
 
             Button(
@@ -608,6 +816,10 @@ fun ProjectCard(
 }
 
 
+/* =========================================================
+   CREATE PROJECT
+   ========================================================= */
+
 @Composable
 fun CreateProjectDialog(
     language: String,
@@ -678,7 +890,8 @@ fun CreateProjectDialog(
                 )
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement =
+                        Arrangement.spacedBy(8.dp)
                 ) {
 
                     Button(
@@ -756,6 +969,10 @@ fun CreateProjectDialog(
 }
 
 
+/* =========================================================
+   EDITOR
+   ========================================================= */
+
 @Composable
 fun EditorScreen(
     project: Project,
@@ -764,22 +981,20 @@ fun EditorScreen(
     onBack: () -> Unit
 ) {
 
-    val objects = remember {
+    val context =
+        androidx.compose.ui.platform.LocalContext.current
 
-        mutableStateListOf(
+    val objects = remember(project) {
 
-            GameObject(
-                id = 1,
-                name = "Main Camera",
-                type = "Camera"
-            ),
+        mutableStateListOf<GameObject>().apply {
 
-            GameObject(
-                id = 2,
-                name = "Directional Light",
-                type = "Light"
+            addAll(
+                loadScene(
+                    context,
+                    project
+                )
             )
-        )
+        }
     }
 
     var selectedObjectId by remember {
@@ -794,6 +1009,14 @@ fun EditorScreen(
         mutableStateOf(false)
     }
 
+    var showRenameDialog by remember {
+        mutableStateOf(false)
+    }
+
+    var objectToRenameId by remember {
+        mutableStateOf<Int?>(null)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -804,7 +1027,26 @@ fun EditorScreen(
             project = project,
             language = language,
             onLanguageChange = onLanguageChange,
-            onBack = onBack
+
+            onSave = {
+
+                saveScene(
+                    context,
+                    project,
+                    objects.toList()
+                )
+            },
+
+            onBack = {
+
+                saveScene(
+                    context,
+                    project,
+                    objects.toList()
+                )
+
+                onBack()
+            }
         )
 
         EditorToolBar(
@@ -831,19 +1073,54 @@ fun EditorScreen(
 
                 onAddObject = {
                     showObjectDialog = true
+                },
+
+                onRename = { id ->
+
+                    objectToRenameId = id
+                    showRenameDialog = true
+                },
+
+                onDelete = { id ->
+
+                    objects.removeAll {
+                        it.id == id
+                    }
+
+                    if (selectedObjectId == id) {
+                        selectedObjectId = null
+                    }
                 }
             )
 
             EditorViewport(
                 project = project,
+                objects = objects,
+                selectedObjectId = selectedObjectId,
                 selectedTool = selectedTool,
-                language = language
+                language = language,
+
+                onSelectObject = {
+                    selectedObjectId = it
+                }
             )
 
             InspectorPanel(
                 objects = objects,
                 selectedObjectId = selectedObjectId,
-                language = language
+                language = language,
+
+                onObjectChange = { changedObject ->
+
+                    val index =
+                        objects.indexOfFirst {
+                            it.id == changedObject.id
+                        }
+
+                    if (index >= 0) {
+                        objects[index] = changedObject
+                    }
+                }
             )
         }
     }
@@ -860,17 +1137,23 @@ fun EditorScreen(
             onAdd = { objectType ->
 
                 val newId =
-                    (objects.maxOfOrNull { it.id } ?: 0) + 1
+                    (objects.maxOfOrNull {
+                        it.id
+                    } ?: 0) + 1
 
                 val objectName = when (objectType) {
 
-                    "Cube" -> "Cube $newId"
+                    "Cube" ->
+                        "Cube $newId"
 
-                    "Sphere" -> "Sphere $newId"
+                    "Sphere" ->
+                        "Sphere $newId"
 
-                    "Camera" -> "Camera $newId"
+                    "Camera" ->
+                        "Camera $newId"
 
-                    else -> "Light $newId"
+                    else ->
+                        "Light $newId"
                 }
 
                 objects.add(
@@ -887,14 +1170,59 @@ fun EditorScreen(
             }
         )
     }
+
+    if (showRenameDialog) {
+
+        val objectToRename =
+            objects.firstOrNull {
+                it.id == objectToRenameId
+            }
+
+        if (objectToRename != null) {
+
+            RenameObjectDialog(
+                language = language,
+                currentName = objectToRename.name,
+
+                onCancel = {
+                    showRenameDialog = false
+                    objectToRenameId = null
+                },
+
+                onRename = { newName ->
+
+                    val index =
+                        objects.indexOfFirst {
+                            it.id == objectToRename.id
+                        }
+
+                    if (index >= 0) {
+
+                        objects[index] =
+                            objectToRename.copy(
+                                name = newName
+                            )
+                    }
+
+                    showRenameDialog = false
+                    objectToRenameId = null
+                }
+            )
+        }
+    }
 }
 
+
+/* =========================================================
+   TOP BAR
+   ========================================================= */
 
 @Composable
 fun EditorTopBar(
     project: Project,
     language: String,
     onLanguageChange: (String) -> Unit,
+    onSave: () -> Unit,
     onBack: () -> Unit
 ) {
 
@@ -904,8 +1232,11 @@ fun EditorTopBar(
             .background(Color(0xFF0F172A))
             .padding(6.dp),
 
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        horizontalArrangement =
+            Arrangement.SpaceBetween,
+
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
 
         TextButton(
@@ -928,8 +1259,22 @@ fun EditorTopBar(
         )
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement =
+                Arrangement.spacedBy(3.dp)
         ) {
+
+            TextButton(
+                onClick = onSave
+            ) {
+
+                Text(
+                    text = text(
+                        language,
+                        "SAVE",
+                        "حفظ"
+                    )
+                )
+            }
 
             Text(
                 text = project.type,
@@ -960,6 +1305,10 @@ fun EditorTopBar(
 }
 
 
+/* =========================================================
+   TOOL BAR
+   ========================================================= */
+
 @Composable
 fun EditorToolBar(
     selectedTool: String,
@@ -973,7 +1322,8 @@ fun EditorToolBar(
             .background(Color(0xFF1E293B))
             .padding(6.dp),
 
-        horizontalArrangement = Arrangement.spacedBy(5.dp)
+        horizontalArrangement =
+            Arrangement.spacedBy(5.dp)
     ) {
 
         val tools = listOf(
@@ -1039,18 +1389,24 @@ fun EditorToolBar(
 }
 
 
+/* =========================================================
+   SCENE TREE
+   ========================================================= */
+
 @Composable
 fun SceneTree(
     objects: List<GameObject>,
     selectedObjectId: Int?,
     language: String,
     onSelect: (Int) -> Unit,
-    onAddObject: () -> Unit
+    onAddObject: () -> Unit,
+    onRename: (Int) -> Unit,
+    onDelete: (Int) -> Unit
 ) {
 
     Column(
         modifier = Modifier
-            .width(160.dp)
+            .width(170.dp)
             .fillMaxSize()
             .background(Color(0xFF0B1220))
             .padding(8.dp)
@@ -1100,27 +1456,86 @@ fun SceneTree(
                 val selected =
                     obj.id == selectedObjectId
 
-                Text(
-                    text = obj.name,
-
-                    color = if (selected) {
-                        Color(0xFF00E5FF)
-                    } else {
-                        Color.White
-                    },
-
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .background(
+                            if (selected) {
+                                Color(0xFF163B4A)
+                            } else {
+                                Color.Transparent
+                            }
+                        )
                         .clickable {
                             onSelect(obj.id)
                         }
-                        .padding(10.dp)
-                )
+                        .padding(7.dp)
+                ) {
+
+                    Text(
+                        text = obj.name,
+
+                        color =
+                            if (selected) {
+                                Color(0xFF00E5FF)
+                            } else {
+                                Color.White
+                            }
+                    )
+
+                    Text(
+                        text = obj.type,
+                        color = Color.Gray,
+                        fontSize = 11.sp
+                    )
+
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(3.dp)
+                    ) {
+
+                        TextButton(
+                            onClick = {
+                                onRename(obj.id)
+                            }
+                        ) {
+
+                            Text(
+                                text = text(
+                                    language,
+                                    "Rename",
+                                    "تسمية"
+                                ),
+                                fontSize = 10.sp
+                            )
+                        }
+
+                        TextButton(
+                            onClick = {
+                                onDelete(obj.id)
+                            }
+                        ) {
+
+                            Text(
+                                text = text(
+                                    language,
+                                    "Delete",
+                                    "حذف"
+                                ),
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+
+/* =========================================================
+   ADD OBJECT
+   ========================================================= */
 
 @Composable
 fun AddObjectDialog(
@@ -1233,11 +1648,18 @@ fun ObjectButton(
 }
 
 
+/* =========================================================
+   VIEWPORT
+   ========================================================= */
+
 @Composable
 fun EditorViewport(
     project: Project,
+    objects: List<GameObject>,
+    selectedObjectId: Int?,
     selectedTool: String,
-    language: String
+    language: String,
+    onSelectObject: (Int) -> Unit
 ) {
 
     Box(
@@ -1248,13 +1670,13 @@ fun EditorViewport(
             .border(
                 width = 1.dp,
                 color = Color(0xFF334155)
-            ),
-
-        contentAlignment = Alignment.Center
+            )
     ) {
 
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(10.dp)
         ) {
 
             Text(
@@ -1264,44 +1686,137 @@ fun EditorViewport(
                     "نافذة ${project.type}"
                 ),
                 color = Color(0xFF00E5FF),
-                fontSize = 22.sp
+                fontSize = 19.sp
             )
 
             Spacer(
-                modifier = Modifier.height(15.dp)
+                modifier = Modifier.height(8.dp)
             )
 
             Text(
-                text = "┼",
-                color = Color(0xFF00E5FF),
-                fontSize = 45.sp
+                text = text(
+                    language,
+                    "GRID / WORKSPACE",
+                    "شبكة / مساحة العمل"
+                ),
+                color = Color(0xFF64748B),
+                fontSize = 12.sp
             )
 
             Spacer(
                 modifier = Modifier.height(10.dp)
             )
 
-            Text(
-                text = "X  ─────────  Z",
-                color = Color(0xFF64748B),
-                fontSize = 16.sp
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(260.dp)
+                    .background(Color(0xFF111827))
+                    .border(
+                        width = 1.dp,
+                        color = Color(0xFF334155)
+                    )
+            ) {
+
+                Text(
+                    text = "+",
+                    modifier = Modifier
+                        .align(Alignment.Center),
+                    color = Color(0xFF00E5FF),
+                    fontSize = 35.sp
+                )
+
+                Text(
+                    text = "X  ───────── Z",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp),
+                    color = Color(0xFF475569),
+                    fontSize = 12.sp
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(10.dp),
+
+                    verticalArrangement =
+                        Arrangement.spacedBy(6.dp)
+                ) {
+
+                    objects.forEach { obj ->
+
+                        val isSelected =
+                            obj.id == selectedObjectId
+
+                        val objectColor =
+                            if (isSelected) {
+                                Color(0xFF00E5FF)
+                            } else {
+                                Color(0xFF334155)
+                            }
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    objectColor
+                                )
+                                .border(
+                                    width = if (isSelected) {
+                                        2.dp
+                                    } else {
+                                        1.dp
+                                    },
+                                    color = if (isSelected) {
+                                        Color.White
+                                    } else {
+                                        Color(0xFF64748B)
+                                    }
+                                )
+                                .clickable {
+                                    onSelectObject(
+                                        obj.id
+                                    )
+                                }
+                                .padding(8.dp)
+                        ) {
+
+                            Row(
+                                modifier =
+                                    Modifier.fillMaxWidth(),
+
+                                horizontalArrangement =
+                                    Arrangement.SpaceBetween
+                            ) {
+
+                                Text(
+                                    text = obj.name,
+                                    color = if (isSelected) {
+                                        Color.Black
+                                    } else {
+                                        Color.White
+                                    },
+                                    fontSize = 13.sp
+                                )
+
+                                Text(
+                                    text = obj.type,
+                                    color = if (isSelected) {
+                                        Color.DarkGray
+                                    } else {
+                                        Color.LightGray
+                                    },
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(
-                modifier = Modifier.height(15.dp)
-            )
-
-            Text(
-                text = text(
-                    language,
-                    "Scene Grid",
-                    "شبكة المشهد"
-                ),
-                color = Color(0xFF64748B)
-            )
-
-            Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier = Modifier.height(10.dp)
             )
 
             Text(
@@ -1312,16 +1827,35 @@ fun EditorViewport(
                 ),
                 color = Color.White
             )
+
+            Spacer(
+                modifier = Modifier.height(5.dp)
+            )
+
+            Text(
+                text = text(
+                    language,
+                    "Tap an object to select it",
+                    "اضغط على عنصر لتحديده"
+                ),
+                color = Color.Gray,
+                fontSize = 12.sp
+            )
         }
     }
 }
 
 
+/* =========================================================
+   INSPECTOR
+   ========================================================= */
+
 @Composable
 fun InspectorPanel(
     objects: List<GameObject>,
     selectedObjectId: Int?,
-    language: String
+    language: String,
+    onObjectChange: (GameObject) -> Unit
 ) {
 
     val selectedObject =
@@ -1331,7 +1865,7 @@ fun InspectorPanel(
 
     Column(
         modifier = Modifier
-            .width(180.dp)
+            .width(190.dp)
             .fillMaxSize()
             .background(Color(0xFF0B1220))
             .padding(10.dp)
@@ -1348,7 +1882,7 @@ fun InspectorPanel(
         )
 
         Spacer(
-            modifier = Modifier.height(15.dp)
+            modifier = Modifier.height(12.dp)
         )
 
         if (selectedObject == null) {
@@ -1367,11 +1901,11 @@ fun InspectorPanel(
             Text(
                 text = selectedObject.name,
                 color = Color.White,
-                fontSize = 18.sp
+                fontSize = 17.sp
             )
 
             Spacer(
-                modifier = Modifier.height(8.dp)
+                modifier = Modifier.height(5.dp)
             )
 
             Text(
@@ -1384,7 +1918,7 @@ fun InspectorPanel(
             )
 
             Spacer(
-                modifier = Modifier.height(20.dp)
+                modifier = Modifier.height(15.dp)
             )
 
             Text(
@@ -1397,53 +1931,325 @@ fun InspectorPanel(
             )
 
             Spacer(
-                modifier = Modifier.height(10.dp)
+                modifier = Modifier.height(8.dp)
             )
 
             Text(
                 text = text(
                     language,
-                    "Position",
+                    "POSITION",
                     "الموقع"
                 ),
                 color = Color.White
             )
 
-            Text("X: 0.0")
-            Text("Y: 0.0")
-            Text("Z: 0.0")
+            NumberField(
+                label = "X",
+                value = selectedObject.positionX,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            positionX = it
+                        )
+                    )
+                }
+            )
+
+            NumberField(
+                label = "Y",
+                value = selectedObject.positionY,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            positionY = it
+                        )
+                    )
+                }
+            )
+
+            NumberField(
+                label = "Z",
+                value = selectedObject.positionZ,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            positionZ = it
+                        )
+                    )
+                }
+            )
 
             Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier = Modifier.height(8.dp)
             )
 
             Text(
                 text = text(
                     language,
-                    "Rotation",
+                    "ROTATION",
                     "الدوران"
-                )
+                ),
+                color = Color.White
             )
 
-            Text("X: 0°")
-            Text("Y: 0°")
-            Text("Z: 0°")
+            NumberField(
+                label = "X",
+                value = selectedObject.rotationX,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            rotationX = it
+                        )
+                    )
+                }
+            )
+
+            NumberField(
+                label = "Y",
+                value = selectedObject.rotationY,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            rotationY = it
+                        )
+                    )
+                }
+            )
+
+            NumberField(
+                label = "Z",
+                value = selectedObject.rotationZ,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            rotationZ = it
+                        )
+                    )
+                }
+            )
 
             Spacer(
-                modifier = Modifier.height(12.dp)
+                modifier = Modifier.height(8.dp)
             )
 
             Text(
                 text = text(
                     language,
-                    "Scale",
+                    "SCALE",
                     "الحجم"
-                )
+                ),
+                color = Color.White
             )
 
-            Text("X: 1.0")
-            Text("Y: 1.0")
-            Text("Z: 1.0")
+            NumberField(
+                label = "X",
+                value = selectedObject.scaleX,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            scaleX = it
+                        )
+                    )
+                }
+            )
+
+            NumberField(
+                label = "Y",
+                value = selectedObject.scaleY,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            scaleY = it
+                        )
+                    )
+                }
+            )
+
+            NumberField(
+                label = "Z",
+                value = selectedObject.scaleZ,
+
+                onChange = {
+
+                    onObjectChange(
+                        selectedObject.copy(
+                            scaleZ = it
+                        )
+                    )
+                }
+            )
         }
     }
+}
+
+
+/* =========================================================
+   NUMBER FIELD
+   ========================================================= */
+
+@Composable
+fun NumberField(
+    label: String,
+    value: Float,
+    onChange: (Float) -> Unit
+) {
+
+    var valueText by remember(
+        value,
+        label
+    ) {
+
+        mutableStateOf(
+            value.toString()
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+
+        verticalAlignment =
+            Alignment.CenterVertically
+    ) {
+
+        Text(
+            text = label,
+            color = Color.LightGray,
+            modifier = Modifier.width(22.dp)
+        )
+
+        OutlinedTextField(
+            value = valueText,
+
+            onValueChange = { newText ->
+
+                valueText = newText
+
+                val number =
+                    newText.toFloatOrNull()
+
+                if (number != null) {
+                    onChange(number)
+                }
+            },
+
+            modifier = Modifier.fillMaxWidth(),
+
+            singleLine = true
+        )
+    }
+}
+
+
+/* =========================================================
+   RENAME
+   ========================================================= */
+
+@Composable
+fun RenameObjectDialog(
+    language: String,
+    currentName: String,
+    onCancel: () -> Unit,
+    onRename: (String) -> Unit
+) {
+
+    var newName by remember {
+        mutableStateOf(currentName)
+    }
+
+    AlertDialog(
+
+        onDismissRequest = onCancel,
+
+        title = {
+
+            Text(
+                text = text(
+                    language,
+                    "Rename Object",
+                    "إعادة تسمية العنصر"
+                )
+            )
+        },
+
+        text = {
+
+            OutlinedTextField(
+                value = newName,
+
+                onValueChange = {
+                    newName = it
+                },
+
+                label = {
+
+                    Text(
+                        text = text(
+                            language,
+                            "Name",
+                            "الاسم"
+                        )
+                    )
+                },
+
+                singleLine = true
+            )
+        },
+
+        confirmButton = {
+
+            Button(
+                onClick = {
+
+                    if (newName.isNotBlank()) {
+                        onRename(
+                            newName.trim()
+                        )
+                    }
+                }
+            ) {
+
+                Text(
+                    text = text(
+                        language,
+                        "RENAME",
+                        "تسمية"
+                    )
+                )
+            }
+        },
+
+        dismissButton = {
+
+            TextButton(
+                onClick = onCancel
+            ) {
+
+                Text(
+                    text = text(
+                        language,
+                        "CANCEL",
+                        "إلغاء"
+                    )
+                )
+            }
+        }
+    )
 }
