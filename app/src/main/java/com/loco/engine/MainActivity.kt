@@ -239,9 +239,13 @@ fun saveObjects(context: Context, project: Project, objects: List<GameObject>) {
    MAIN APP
    ========================= */
 
-val ProjectSaver = Saver<Project?, List<String>>(
+val ProjectSaver: Saver<Project?, Any> = Saver(
     save = { project -> project?.let { listOf(it.name, it.type) } },
-    restore = { list -> if (list.size >= 2) Project(list[0], list[1]) else null }
+    restore = {
+        @Suppress("UNCHECKED_CAST")
+        val list = it as? List<String>
+        if (list != null && list.size >= 2) Project(list[0], list[1]) else null
+    }
 )
 
 @Composable
@@ -577,6 +581,8 @@ fun EditorScreen(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val isLandscape = maxWidth > 700.dp
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -598,7 +604,7 @@ fun EditorScreen(
                 onScaleDown = { scaleSelected(-0.2f) }
             )
 
-            if (maxWidth > 700.dp) {
+            if (isLandscape) {
                 /* LANDSCAPE */
                 Row(modifier = Modifier.fillMaxSize()) {
                     SceneTree(
@@ -618,7 +624,10 @@ fun EditorScreen(
                         onSelect = { selectedObjectId = it },
                         onMove = { id, dx, dy ->
                             updateObject(id) { it.copy(x = it.x + dx, y = it.y + dy) }
-                        }
+                        },
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .weight(1f)
                     )
 
                     InspectorPanel(
@@ -669,6 +678,9 @@ fun EditorScreen(
                         onMove = { id, dx, dy ->
                             updateObject(id) { it.copy(x = it.x + dx, y = it.y + dy) }
                         },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(300.dp),
                         compact = true
                     )
 
@@ -949,22 +961,13 @@ fun EditorViewport(
     language: String,
     onSelect: (Int) -> Unit,
     onMove: (Int, Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
     Box(
-        modifier = if (compact) {
-            Modifier
-                .fillMaxWidth()
-                .height(300.dp)
-                .background(Color(0xFF182233))
-                .border(1.dp, Color(0xFF334155))
-        } else {
-            Modifier
-                .fillMaxHeight()
-                .weight(1f)
-                .background(Color(0xFF182233))
-                .border(1.dp, Color(0xFF334155))
-        }
+        modifier = modifier
+            .background(Color(0xFF182233))
+            .border(1.dp, Color(0xFF334155))
     ) {
         Text(
             text = text(language, "${project.type} VIEWPORT", "نافذة ${project.type}"),
