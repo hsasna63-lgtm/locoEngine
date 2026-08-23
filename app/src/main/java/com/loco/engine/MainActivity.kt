@@ -2302,3 +2302,4 @@ fun InspectorPanel(
             }
         }
     }
+}
