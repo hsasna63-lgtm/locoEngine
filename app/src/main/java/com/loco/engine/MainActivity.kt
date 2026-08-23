@@ -2001,6 +2001,31 @@ fun EditorViewport(
         }
     ) {
 
+        if (project.type == "3D") {
+
+            Viewport3DView(
+                objects = objects,
+                selectedObjectId = selectedObjectId,
+                modifier = Modifier.fillMaxSize()
+            )
+
+            objects.forEach { obj ->
+
+                if (obj.id == selectedObjectId) {
+
+                    Text(
+                        text = obj.name,
+                        color = Color(0xFF00E5FF),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(8.dp)
+                    )
+                }
+            }
+
+            return@Box
+        }
+
         Text(
             text = text(
                 language,
