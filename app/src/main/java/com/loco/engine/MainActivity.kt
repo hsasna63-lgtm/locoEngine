@@ -432,31 +432,27 @@ fun LocoEngineApp(
         mutableStateOf(initialLanguage)
     }
 
-    var openedProject by rememberSaveable(
-        saver = androidx.compose.runtime.saveable.Saver(
-            save = {
-                if (it == null) {
-                    null
-                } else {
-                    listOf(
-                        it.name,
-                        it.type
-                    )
-                }
-            },
-            restore = {
-                if (it == null) {
-                    null
-                } else {
-                    Project(
-                        name = it[0],
-                        type = it[1]
-                    )
-                }
-            }
-        )
-    ) {
-        mutableStateOf(initialOpenedProject)
+    var openedProjectName by rememberSaveable {
+        mutableStateOf(initialOpenedProject?.name)
+    }
+
+    var openedProjectType by rememberSaveable {
+        mutableStateOf(initialOpenedProject?.type)
+    }
+
+    val openedProject: Project? =
+        if (openedProjectName != null && openedProjectType != null) {
+            Project(
+                name = openedProjectName!!,
+                type = openedProjectType!!
+            )
+        } else {
+            null
+        }
+
+    fun setOpenedProject(project: Project?) {
+        openedProjectName = project?.name
+        openedProjectType = project?.type
     }
 
     if (openedProject != null) {
@@ -477,7 +473,7 @@ fun LocoEngineApp(
 
             onBack = {
 
-                openedProject = null
+                setOpenedProject(null)
 
                 saveOpenedProject(
                     context,
@@ -521,7 +517,7 @@ fun LocoEngineApp(
 
         onOpenProject = {
 
-            openedProject = it
+            setOpenedProject(it)
 
             saveOpenedProject(
                 context,
@@ -1201,7 +1197,7 @@ fun EditorScreen(
             )
 
 
-            if (maxWidth > 700.dp) {
+            if (this@BoxWithConstraints.maxWidth > 700.dp) {
 
                 /* LANDSCAPE */
 
@@ -1249,7 +1245,9 @@ fun EditorScreen(
                                     y = it.y + dy
                                 )
                             }
-                        }
+                        },
+
+                        modifier = Modifier.weight(1f)
                     )
 
 
@@ -1960,13 +1958,14 @@ fun EditorViewport(
     language: String,
     onSelect: (Int) -> Unit,
     onMove: (Int, Float, Float) -> Unit,
+    modifier: Modifier = Modifier,
     compact: Boolean = false
 ) {
 
     Box(
         modifier = if (compact) {
 
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .height(300.dp)
                 .background(Color(0xFF182233))
@@ -1977,9 +1976,8 @@ fun EditorViewport(
 
         } else {
 
-            Modifier
+            modifier
                 .fillMaxHeight()
-                .weight(1f)
                 .background(Color(0xFF182233))
                 .border(
                     1.dp,
