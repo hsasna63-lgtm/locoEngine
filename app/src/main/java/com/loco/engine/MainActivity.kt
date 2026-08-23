@@ -215,6 +215,21 @@ fun text(
 }
 
 
+fun objectTypeColor(type: String): Color {
+
+    return when (type) {
+
+        "Cube" -> Color(0xFF3B82F6)
+
+        "Sphere" -> Color(0xFF22C55E)
+
+        "Camera" -> Color(0xFFF97316)
+
+        else -> Color(0xFFEAB308)
+    }
+}
+
+
 /* =========================
    OPENED PROJECT STORAGE
    ========================= */
@@ -2035,7 +2050,7 @@ fun EditorViewport(
                         if (isSelected) {
                             Color(0xFF00E5FF)
                         } else {
-                            Color(0xFF475569)
+                            objectTypeColor(obj.type)
                         }
                     )
                     .border(
