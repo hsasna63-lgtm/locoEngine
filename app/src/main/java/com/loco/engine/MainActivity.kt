@@ -1358,7 +1358,8 @@ fun EditorScreen(
                                     x = it.x + dx,
                                     y = it.y + dy
                                 )
-                            },
+                            }
+                        },
 
                         compact = true
                     )
