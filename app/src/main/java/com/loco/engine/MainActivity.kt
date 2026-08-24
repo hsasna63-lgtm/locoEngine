@@ -24,11 +24,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -43,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1824,6 +1827,61 @@ fun EditorScreen(
     }
 
 
+    fun updateComponentField(
+        id: Int,
+        type: ComponentType,
+        update: (ComponentData) -> ComponentData
+    ) {
+
+        if (isPlaying) {
+            return
+        }
+
+        updateObject(id) {
+
+            val newSet =
+                ComponentSet(
+                    it.components
+                        .components
+                        .toMutableList()
+                )
+
+            newSet.update(type, update)
+
+            it.copy(
+                components = newSet
+            )
+        }
+    }
+
+
+    fun removeComponentFromObject(
+        id: Int,
+        type: ComponentType
+    ) {
+
+        if (isPlaying) {
+            return
+        }
+
+        updateObject(id) {
+
+            val newSet =
+                ComponentSet(
+                    it.components
+                        .components
+                        .toMutableList()
+                )
+
+            newSet.remove(type)
+
+            it.copy(
+                components = newSet
+            )
+        }
+    }
+
+
     /* =====================================================
        EDITOR LAYOUT
        ===================================================== */
@@ -2143,6 +2201,28 @@ fun EditorScreen(
                             type ->
 
                         addComponent(
+                            id,
+                            type
+                        )
+                    },
+
+                    onUpdateComponent = {
+                            id,
+                            type,
+                            update ->
+
+                        updateComponentField(
+                            id,
+                            type,
+                            update
+                        )
+                    },
+
+                    onRemoveComponent = {
+                            id,
+                            type ->
+
+                        removeComponentFromObject(
                             id,
                             type
                         )
@@ -2593,7 +2673,7 @@ fun SceneTree(
     Column(
         modifier =
             Modifier
-                .width(185.dp)
+                .width(150.dp)
                 .fillMaxHeight()
                 .background(
                     Color(0xFF0B1220)
@@ -2718,7 +2798,7 @@ fun SceneTree(
 
                     Text(
                         text =
-                            obj.name,
+                            "${obj.name} (${obj.components.components.size})",
 
                         color =
                             if (
@@ -3204,6 +3284,8 @@ fun InspectorPanel(
     worldBackgroundColor: Color,
     onWorldBackgroundColorChange: (Color) -> Unit,
     onAddComponent: (Int, ComponentType) -> Unit,
+    onUpdateComponent: (Int, ComponentType, (ComponentData) -> ComponentData) -> Unit,
+    onRemoveComponent: (Int, ComponentType) -> Unit,
     compact: Boolean = false
 ) {
 
@@ -3215,7 +3297,7 @@ fun InspectorPanel(
     Column(
         modifier =
             Modifier
-                .width(200.dp)
+                .width(280.dp)
                 .fillMaxHeight()
                 .background(Color(0xFF0B1220))
                 .padding(10.dp)
@@ -3389,11 +3471,15 @@ fun InspectorPanel(
 
             selectedObject.components.components.forEach { component ->
 
-                Text(
-                    text = "• " + componentDisplayName(component.type, language),
-                    color = Color.White,
-                    modifier = Modifier.padding(vertical = 2.dp)
+                ComponentCard(
+                    objectId = selectedObject.id,
+                    component = component,
+                    language = language,
+                    onUpdate = onUpdateComponent,
+                    onRemove = onRemoveComponent
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -3421,8 +3507,280 @@ fun InspectorPanel(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(componentDisplayName(type, language))
+                        Text(
+                            componentIcon(type) + " " + componentDisplayName(type, language)
+                        )
                     }
+                }
+            }
+        }
+    }
+}
+
+
+/* =========================================================
+   COMPONENT ICON
+   ========================================================= */
+
+fun componentIcon(type: ComponentType): String {
+
+    return when (type) {
+        ComponentType.TRANSFORM -> "📐"
+        ComponentType.MESH_RENDERER -> "🧱"
+        ComponentType.LIGHT -> "💡"
+        ComponentType.CAMERA -> "🎥"
+        ComponentType.COLLIDER -> "📦"
+    }
+}
+
+
+/* =========================================================
+   COMPONENT NUMBER FIELD
+   ========================================================= */
+
+@Composable
+fun ComponentNumberField(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit
+) {
+
+    var text by remember(value) {
+        mutableStateOf(
+            if (value == value.toInt().toFloat()) {
+                value.toInt().toString()
+            } else {
+                value.toString()
+            }
+        )
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { newText ->
+            text = newText
+            newText.toFloatOrNull()?.let { parsed ->
+                onValueChange(parsed)
+            }
+        },
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+
+/* =========================================================
+   COMPONENT CARD
+   ========================================================= */
+
+@Composable
+fun ComponentCard(
+    objectId: Int,
+    component: ComponentData,
+    language: String,
+    onUpdate: (Int, ComponentType, (ComponentData) -> ComponentData) -> Unit,
+    onRemove: (Int, ComponentType) -> Unit
+) {
+
+    var expanded by remember(component.type) {
+        mutableStateOf(false)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF162032))
+            .padding(6.dp)
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Text(
+                text = componentIcon(component.type) + " " +
+                    componentDisplayName(component.type, language),
+                color = Color.White,
+                modifier = Modifier.weight(1f)
+            )
+
+            Switch(
+                checked = component.enabled,
+                onCheckedChange = { checked ->
+                    onUpdate(objectId, component.type) {
+                        it.copy(enabled = checked)
+                    }
+                }
+            )
+
+            Text(
+                text = "✕",
+                color = Color(0xFFEF4444),
+                modifier = Modifier
+                    .clickable {
+                        onRemove(objectId, component.type)
+                    }
+                    .padding(horizontal = 6.dp)
+            )
+        }
+
+        if (expanded) {
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            when (component.type) {
+
+                ComponentType.TRANSFORM -> {
+
+                    ComponentNumberField(
+                        label = "Position X",
+                        value = component.positionX
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(positionX = it) } }
+
+                    ComponentNumberField(
+                        label = "Position Y",
+                        value = component.positionY
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(positionY = it) } }
+
+                    ComponentNumberField(
+                        label = "Position Z",
+                        value = component.positionZ
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(positionZ = it) } }
+
+                    ComponentNumberField(
+                        label = "Rotation X",
+                        value = component.rotationX
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(rotationX = it) } }
+
+                    ComponentNumberField(
+                        label = "Rotation Y",
+                        value = component.rotationY
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(rotationY = it) } }
+
+                    ComponentNumberField(
+                        label = "Rotation Z",
+                        value = component.rotationZ
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(rotationZ = it) } }
+
+                    ComponentNumberField(
+                        label = "Scale X",
+                        value = component.scaleX
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(scaleX = it) } }
+
+                    ComponentNumberField(
+                        label = "Scale Y",
+                        value = component.scaleY
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(scaleY = it) } }
+
+                    ComponentNumberField(
+                        label = "Scale Z",
+                        value = component.scaleZ
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(scaleZ = it) } }
+                }
+
+                ComponentType.MESH_RENDERER -> {
+
+                    OutlinedTextField(
+                        value = component.mesh,
+                        onValueChange = { newValue ->
+                            onUpdate(objectId, component.type) { c -> c.copy(mesh = newValue) }
+                        },
+                        label = { Text("Mesh") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = component.material,
+                        onValueChange = { newValue ->
+                            onUpdate(objectId, component.type) { c -> c.copy(material = newValue) }
+                        },
+                        label = { Text("Material") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                ComponentType.LIGHT -> {
+
+                    ComponentNumberField(
+                        label = "Intensity",
+                        value = component.intensity
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(intensity = it) } }
+
+                    ComponentNumberField(
+                        label = "Range",
+                        value = component.range
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(range = it) } }
+
+                    Text(
+                        text = text(language, "Color", "اللون"),
+                        color = Color.Gray
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+
+                        val presets = listOf(
+                            Triple(1f, 1f, 1f),
+                            Triple(1f, 0.6f, 0.3f),
+                            Triple(0.5f, 0.7f, 1f),
+                            Triple(1f, 0.3f, 0.3f)
+                        )
+
+                        presets.forEach { (r, g, b) ->
+
+                            Box(
+                                modifier = Modifier
+                                    .width(26.dp)
+                                    .height(26.dp)
+                                    .background(Color(r, g, b))
+                                    .border(1.dp, Color.White)
+                                    .clickable {
+                                        onUpdate(objectId, component.type) { c ->
+                                            c.copy(colorR = r, colorG = g, colorB = b)
+                                        }
+                                    }
+                            )
+                        }
+                    }
+                }
+
+                ComponentType.CAMERA -> {
+
+                    ComponentNumberField(
+                        label = "Field Of View",
+                        value = component.fieldOfView
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(fieldOfView = it) } }
+
+                    ComponentNumberField(
+                        label = "Near Clip",
+                        value = component.nearClip
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(nearClip = it) } }
+
+                    ComponentNumberField(
+                        label = "Far Clip",
+                        value = component.farClip
+                    ) { onUpdate(objectId, component.type) { c -> c.copy(farClip = it) } }
+                }
+
+                ComponentType.COLLIDER -> {
+
+                    OutlinedTextField(
+                        value = component.colliderShape,
+                        onValueChange = { newValue ->
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(colliderShape = newValue)
+                            }
+                        },
+                        label = { Text("Shape") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }
