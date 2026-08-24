@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -87,7 +88,9 @@ data class GameObject(
     val x: Float = 0f,
     val y: Float = 0f,
     val rotation: Float = 0f,
-    val scale: Float = 1f
+    val scale: Float = 1f,
+    val visible: Boolean = true,
+    val locked: Boolean = false
 )
 
 
@@ -311,6 +314,56 @@ fun objectStorageKey(
 }
 
 
+fun worldBackgroundStorageKey(
+    project: Project
+): String {
+
+    return "world_bg_${project.name}_${project.type}"
+        .replace(" ", "_")
+}
+
+
+fun saveWorldBackgroundColor(
+    context: Context,
+    project: Project,
+    color: Color
+) {
+
+    context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .putInt(
+            worldBackgroundStorageKey(project),
+            color.toArgb()
+        )
+        .apply()
+}
+
+
+fun loadWorldBackgroundColor(
+    context: Context,
+    project: Project
+): Color {
+
+    val defaultArgb = Color(0xFF182233).toArgb()
+
+    val stored = context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .getInt(
+            worldBackgroundStorageKey(project),
+            defaultArgb
+        )
+
+    return Color(stored)
+}
+
+
 fun loadObjects(
     context: Context,
     project: Project
@@ -371,7 +424,15 @@ fun loadObjects(
                     scale = item.optDouble(
                         "scale",
                         1.0
-                    ).toFloat()
+                    ).toFloat(),
+                    visible = item.optBoolean(
+                        "visible",
+                        true
+                    ),
+                    locked = item.optBoolean(
+                        "locked",
+                        false
+                    )
                 )
             )
         }
@@ -404,6 +465,8 @@ fun saveObjects(
         item.put("y", obj.y)
         item.put("rotation", obj.rotation)
         item.put("scale", obj.scale)
+        item.put("visible", obj.visible)
+        item.put("locked", obj.locked)
 
         array.put(item)
     }
@@ -1106,6 +1169,43 @@ fun EditorScreen(
     }
 
 
+    var searchQuery by remember {
+        mutableStateOf("")
+    }
+
+
+    var snapEnabled by remember {
+        mutableStateOf(false)
+    }
+
+
+    var isPlaying by remember {
+        mutableStateOf(false)
+    }
+
+
+    var worldBackgroundColor by remember(project.name) {
+        mutableStateOf(
+            loadWorldBackgroundColor(
+                context,
+                project
+            )
+        )
+    }
+
+
+    fun changeWorldBackgroundColor(color: Color) {
+
+        worldBackgroundColor = color
+
+        saveWorldBackgroundColor(
+            context,
+            project,
+            color
+        )
+    }
+
+
     fun saveCurrentObjects() {
 
         saveObjects(
@@ -1135,7 +1235,84 @@ fun EditorScreen(
     }
 
 
+    fun toggleVisible(id: Int) {
+
+        updateObject(id) {
+            it.copy(visible = !it.visible)
+        }
+    }
+
+
+    fun toggleLock(id: Int) {
+
+        updateObject(id) {
+            it.copy(locked = !it.locked)
+        }
+    }
+
+
+    fun renameObject(id: Int, newName: String) {
+
+        if (newName.isNotBlank()) {
+
+            updateObject(id) {
+                it.copy(name = newName)
+            }
+        }
+    }
+
+
+    fun resetTransform(id: Int) {
+
+        updateObject(id) {
+
+            it.copy(
+                x = 0f,
+                y = 0f,
+                rotation = 0f,
+                scale = 1f
+            )
+        }
+    }
+
+
+    fun moveSelected(id: Int, dx: Float, dy: Float) {
+
+        val target = objects.firstOrNull { it.id == id }
+            ?: return
+
+        if (target.locked) {
+            return
+        }
+
+        val snapSize = 20f
+
+        updateObject(id) {
+
+            val newX = it.x + dx
+            val newY = it.y + dy
+
+            it.copy(
+                x = if (snapEnabled) {
+                    (newX / snapSize).roundToInt() * snapSize
+                } else {
+                    newX
+                },
+                y = if (snapEnabled) {
+                    (newY / snapSize).roundToInt() * snapSize
+                } else {
+                    newY
+                }
+            )
+        }
+    }
+
+
     fun rotateSelected() {
+
+        if (isPlaying) {
+            return
+        }
 
         val id = selectedObjectId
             ?: return
@@ -1151,6 +1328,10 @@ fun EditorScreen(
 
 
     fun scaleSelected(amount: Float) {
+
+        if (isPlaying) {
+            return
+        }
 
         val id = selectedObjectId
             ?: return
@@ -1186,6 +1367,12 @@ fun EditorScreen(
                 onLanguageChange =
                     onLanguageChange,
 
+                isPlaying = isPlaying,
+
+                onTogglePlay = {
+                    isPlaying = !isPlaying
+                },
+
                 onBack = onBack
             )
 
@@ -1208,6 +1395,12 @@ fun EditorScreen(
 
                 onScaleDown = {
                     scaleSelected(-0.2f)
+                },
+
+                snapEnabled = snapEnabled,
+
+                onToggleSnap = {
+                    snapEnabled = !snapEnabled
                 }
             )
 
@@ -1233,7 +1426,23 @@ fun EditorScreen(
                         },
 
                         onAddObject = {
-                            showObjectDialog = true
+                            if (!isPlaying) {
+                                showObjectDialog = true
+                            }
+                        },
+
+                        searchQuery = searchQuery,
+
+                        onSearchChange = {
+                            searchQuery = it
+                        },
+
+                        onToggleVisible = { id ->
+                            toggleVisible(id)
+                        },
+
+                        onToggleLock = { id ->
+                            toggleLock(id)
                         }
                     )
 
@@ -1253,14 +1462,12 @@ fun EditorScreen(
 
                         onMove = { id, dx, dy ->
 
-                            updateObject(id) {
-
-                                it.copy(
-                                    x = it.x + dx,
-                                    y = it.y + dy
-                                )
+                            if (!isPlaying) {
+                                moveSelected(id, dx, dy)
                             }
                         },
+
+                        backgroundColor = worldBackgroundColor,
 
                         modifier = Modifier.weight(1f)
                     )
@@ -1275,13 +1482,32 @@ fun EditorScreen(
 
                         onDelete = { id ->
 
-                            objects.removeAll {
-                                it.id == id
+                            if (!isPlaying) {
+
+                                objects.removeAll {
+                                    it.id == id
+                                }
+
+                                selectedObjectId = null
+
+                                saveCurrentObjects()
                             }
+                        },
 
-                            selectedObjectId = null
+                        onRename = { id, newName ->
+                            renameObject(id, newName)
+                        },
 
-                            saveCurrentObjects()
+                        onResetTransform = { id ->
+                            if (!isPlaying) {
+                                resetTransform(id)
+                            }
+                        },
+
+                        worldBackgroundColor = worldBackgroundColor,
+
+                        onWorldBackgroundColorChange = {
+                            changeWorldBackgroundColor(it)
                         },
 
                         onDuplicate = { id ->
@@ -1291,7 +1517,7 @@ fun EditorScreen(
                                     it.id == id
                                 }
 
-                            if (original != null) {
+                            if (original != null && !isPlaying) {
 
                                 val newId =
                                     (
@@ -1343,7 +1569,23 @@ fun EditorScreen(
                         },
 
                         onAddObject = {
-                            showObjectDialog = true
+                            if (!isPlaying) {
+                                showObjectDialog = true
+                            }
+                        },
+
+                        searchQuery = searchQuery,
+
+                        onSearchChange = {
+                            searchQuery = it
+                        },
+
+                        onToggleVisible = { id ->
+                            toggleVisible(id)
+                        },
+
+                        onToggleLock = { id ->
+                            toggleLock(id)
                         },
 
                         compact = true
@@ -1365,14 +1607,12 @@ fun EditorScreen(
 
                         onMove = { id, dx, dy ->
 
-                            updateObject(id) {
-
-                                it.copy(
-                                    x = it.x + dx,
-                                    y = it.y + dy
-                                )
+                            if (!isPlaying) {
+                                moveSelected(id, dx, dy)
                             }
                         },
+
+                        backgroundColor = worldBackgroundColor,
 
                         compact = true
                     )
@@ -1387,13 +1627,32 @@ fun EditorScreen(
 
                         onDelete = { id ->
 
-                            objects.removeAll {
-                                it.id == id
+                            if (!isPlaying) {
+
+                                objects.removeAll {
+                                    it.id == id
+                                }
+
+                                selectedObjectId = null
+
+                                saveCurrentObjects()
                             }
+                        },
 
-                            selectedObjectId = null
+                        onRename = { id, newName ->
+                            renameObject(id, newName)
+                        },
 
-                            saveCurrentObjects()
+                        onResetTransform = { id ->
+                            if (!isPlaying) {
+                                resetTransform(id)
+                            }
+                        },
+
+                        worldBackgroundColor = worldBackgroundColor,
+
+                        onWorldBackgroundColorChange = {
+                            changeWorldBackgroundColor(it)
                         },
 
                         onDuplicate = { id ->
@@ -1403,7 +1662,7 @@ fun EditorScreen(
                                     it.id == id
                                 }
 
-                            if (original != null) {
+                            if (original != null && !isPlaying) {
 
                                 val newId =
                                     (
@@ -1507,6 +1766,8 @@ fun EditorTopBar(
     project: Project,
     language: String,
     onLanguageChange: (String) -> Unit,
+    isPlaying: Boolean,
+    onTogglePlay: () -> Unit,
     onBack: () -> Unit
 ) {
 
@@ -1548,6 +1809,34 @@ fun EditorTopBar(
             horizontalArrangement =
                 Arrangement.spacedBy(4.dp)
         ) {
+
+            TextButton(
+                onClick = onTogglePlay
+            ) {
+
+                Text(
+                    text = if (isPlaying) {
+                        text(
+                            language,
+                            "⏸ STOP",
+                            "⏸ إيقاف"
+                        )
+                    } else {
+                        text(
+                            language,
+                            "▶ PLAY",
+                            "▶ تشغيل"
+                        )
+                    },
+
+                    color = if (isPlaying) {
+                        Color(0xFF22C55E)
+                    } else {
+                        Color.White
+                    }
+                )
+            }
+
 
             Text(
                 text = project.type,
@@ -1593,13 +1882,15 @@ fun EditorToolBar(
     onToolSelected: (String) -> Unit,
     onRotate: () -> Unit,
     onScaleUp: () -> Unit,
-    onScaleDown: () -> Unit
+    onScaleDown: () -> Unit,
+    snapEnabled: Boolean,
+    onToggleSnap: () -> Unit
 ) {
 
     LazyColumn(
         modifier = Modifier
             .fillMaxWidth()
-            .height(105.dp)
+            .height(130.dp)
             .background(Color(0xFF1E293B))
             .padding(5.dp)
     ) {
@@ -1730,6 +2021,38 @@ fun EditorToolBar(
                         )
                     )
                 }
+
+
+                if (snapEnabled) {
+
+                    Button(
+                        onClick = onToggleSnap
+                    ) {
+
+                        Text(
+                            text = text(
+                                language,
+                                "🧲 SNAP ON",
+                                "🧲 التقاط: تشغيل"
+                            )
+                        )
+                    }
+
+                } else {
+
+                    OutlinedButton(
+                        onClick = onToggleSnap
+                    ) {
+
+                        Text(
+                            text = text(
+                                language,
+                                "🧲 SNAP OFF",
+                                "🧲 التقاط: إيقاف"
+                            )
+                        )
+                    }
+                }
             }
         }
     }
@@ -1747,6 +2070,10 @@ fun SceneTree(
     language: String,
     onSelect: (Int) -> Unit,
     onAddObject: () -> Unit,
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    onToggleVisible: (Int) -> Unit,
+    onToggleLock: (Int) -> Unit,
     compact: Boolean = false
 ) {
 
@@ -1755,14 +2082,14 @@ fun SceneTree(
 
             Modifier
                 .fillMaxWidth()
-                .height(130.dp)
+                .height(170.dp)
                 .background(Color(0xFF0B1220))
                 .padding(8.dp)
 
         } else {
 
             Modifier
-                .width(170.dp)
+                .width(190.dp)
                 .fillMaxHeight()
                 .background(Color(0xFF0B1220))
                 .padding(8.dp)
@@ -1772,11 +2099,36 @@ fun SceneTree(
         Text(
             text = text(
                 language,
-                "SCENE",
-                "المشهد"
+                "SCENE (${objects.size})",
+                "المشهد (${objects.size})"
             ),
             color = Color(0xFF00E5FF),
             fontSize = 18.sp
+        )
+
+
+        Spacer(
+            modifier = Modifier.height(5.dp)
+        )
+
+
+        OutlinedTextField(
+            value = searchQuery,
+
+            onValueChange = onSearchChange,
+
+            label = {
+
+                Text(
+                    text = text(
+                        language,
+                        "Search",
+                        "بحث"
+                    )
+                )
+            },
+
+            modifier = Modifier.fillMaxWidth()
         )
 
 
@@ -1805,10 +2157,18 @@ fun SceneTree(
         )
 
 
+        val filteredObjects = objects.filter {
+            it.name.contains(
+                searchQuery,
+                ignoreCase = true
+            )
+        }
+
+
         LazyColumn {
 
             items(
-                items = objects,
+                items = filteredObjects,
                 key = {
                     it.id
                 }
@@ -1818,23 +2178,63 @@ fun SceneTree(
                     obj.id == selectedObjectId
 
 
-                Text(
-                    text = obj.name,
-
-                    color =
-                        if (selected) {
-                            Color(0xFF00E5FF)
-                        } else {
-                            Color.White
-                        },
-
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
                             onSelect(obj.id)
                         }
-                        .padding(7.dp)
-                )
+                        .padding(7.dp),
+
+                    verticalAlignment =
+                        Alignment.CenterVertically
+                ) {
+
+                    Text(
+                        text = obj.name,
+
+                        color =
+                            if (selected) {
+                                Color(0xFF00E5FF)
+                            } else if (!obj.visible) {
+                                Color.Gray
+                            } else {
+                                Color.White
+                            },
+
+                        modifier = Modifier.weight(1f)
+                    )
+
+
+                    Text(
+                        text = if (obj.visible) {
+                            "👁"
+                        } else {
+                            "🚫"
+                        },
+
+                        modifier = Modifier
+                            .clickable {
+                                onToggleVisible(obj.id)
+                            }
+                            .padding(horizontal = 4.dp)
+                    )
+
+
+                    Text(
+                        text = if (obj.locked) {
+                            "🔒"
+                        } else {
+                            "🔓"
+                        },
+
+                        modifier = Modifier
+                            .clickable {
+                                onToggleLock(obj.id)
+                            }
+                            .padding(horizontal = 4.dp)
+                    )
+                }
             }
         }
     }
@@ -1974,6 +2374,7 @@ fun EditorViewport(
     onSelect: (Int) -> Unit,
     onMove: (Int, Float, Float) -> Unit,
     modifier: Modifier = Modifier,
+    backgroundColor: Color = Color(0xFF182233),
     compact: Boolean = false
 ) {
 
@@ -1983,7 +2384,7 @@ fun EditorViewport(
             modifier
                 .fillMaxWidth()
                 .height(300.dp)
-                .background(Color(0xFF182233))
+                .background(backgroundColor)
                 .border(
                     1.dp,
                     Color(0xFF334155)
@@ -1993,7 +2394,7 @@ fun EditorViewport(
 
             modifier
                 .fillMaxHeight()
-                .background(Color(0xFF182233))
+                .background(backgroundColor)
                 .border(
                     1.dp,
                     Color(0xFF334155)
@@ -2006,6 +2407,7 @@ fun EditorViewport(
             Viewport3DView(
                 objects = objects,
                 selectedObjectId = selectedObjectId,
+                backgroundColor = backgroundColor,
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -2050,6 +2452,10 @@ fun EditorViewport(
 
 
         objects.forEach { obj ->
+
+            if (!obj.visible) {
+                return@forEach
+            }
 
             val isSelected =
                 obj.id == selectedObjectId
@@ -2169,6 +2575,10 @@ fun InspectorPanel(
     language: String,
     onDelete: (Int) -> Unit,
     onDuplicate: (Int) -> Unit,
+    onRename: (Int, String) -> Unit,
+    onResetTransform: (Int) -> Unit,
+    worldBackgroundColor: Color,
+    onWorldBackgroundColorChange: (Color) -> Unit,
     compact: Boolean = false
 ) {
 
@@ -2213,6 +2623,60 @@ fun InspectorPanel(
         )
 
 
+        Text(
+            text = text(
+                language,
+                "World Background",
+                "خلفية العالم"
+            ),
+            color = Color.Gray
+        )
+
+
+        Row(
+            horizontalArrangement =
+                Arrangement.spacedBy(6.dp)
+        ) {
+
+            val presets = listOf(
+                Color(0xFF182233),
+                Color(0xFF1B1B1B),
+                Color(0xFF223311),
+                Color(0xFF2B1730)
+            )
+
+            presets.forEach { presetColor ->
+
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height(28.dp)
+                        .background(presetColor)
+                        .border(
+                            width = if (
+                                presetColor == worldBackgroundColor
+                            ) {
+                                2.dp
+                            } else {
+                                1.dp
+                            },
+                            color = Color.White
+                        )
+                        .clickable {
+                            onWorldBackgroundColorChange(
+                                presetColor
+                            )
+                        }
+                )
+            }
+        }
+
+
+        Spacer(
+            modifier = Modifier.height(8.dp)
+        )
+
+
         if (selectedObject == null) {
 
             Text(
@@ -2226,10 +2690,35 @@ fun InspectorPanel(
 
         } else {
 
-            Text(
-                text = selectedObject.name,
-                color = Color.White,
-                fontSize = 17.sp
+            var renameText by remember(selectedObject.id) {
+                mutableStateOf(selectedObject.name)
+            }
+
+            OutlinedTextField(
+                value = renameText,
+
+                onValueChange = {
+                    renameText = it
+                    onRename(selectedObject.id, it)
+                },
+
+                label = {
+
+                    Text(
+                        text = text(
+                            language,
+                            "Name",
+                            "الاسم"
+                        )
+                    )
+                },
+
+                modifier = Modifier.fillMaxWidth()
+            )
+
+
+            Spacer(
+                modifier = Modifier.height(5.dp)
             )
 
 
@@ -2317,6 +2806,24 @@ fun InspectorPanel(
                             language,
                             "DUP",
                             "نسخ"
+                        )
+                    )
+                }
+
+
+                OutlinedButton(
+                    onClick = {
+                        onResetTransform(
+                            selectedObject.id
+                        )
+                    }
+                ) {
+
+                    Text(
+                        text = text(
+                            language,
+                            "RESET",
+                            "إعادة ضبط"
                         )
                     )
                 }
