@@ -7,6 +7,7 @@ import android.opengl.Matrix
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.viewinterop.AndroidView
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -136,6 +137,15 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     @Volatile
     var distance = 11f
 
+    @Volatile
+    var clearR = 0.06f
+
+    @Volatile
+    var clearG = 0.07f
+
+    @Volatile
+    var clearB = 0.1f
+
     private var program = 0
     private lateinit var vertexBuffer: FloatBuffer
     private lateinit var indexBuffer: java.nio.ShortBuffer
@@ -235,6 +245,8 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
         updateViewMatrix()
 
+        GLES20.glClearColor(clearR, clearG, clearB, 1f)
+
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(program)
 
@@ -306,6 +318,7 @@ fun objectTypeColorRgb(type: String): Triple<Float, Float, Float> {
 fun Viewport3DView(
     objects: List<GameObject>,
     selectedObjectId: Int?,
+    backgroundColor: Color = Color(0xFF182233),
     modifier: Modifier = Modifier
 ) {
 
@@ -359,7 +372,13 @@ fun Viewport3DView(
 
             val renderer = view.tag as Viewport3DRenderer
 
-            renderer.renderObjects = objects.map { obj ->
+            renderer.clearR = backgroundColor.red
+            renderer.clearG = backgroundColor.green
+            renderer.clearB = backgroundColor.blue
+
+            renderer.renderObjects = objects
+                .filter { it.visible }
+                .map { obj ->
 
                 val (r, g, b) = objectTypeColorRgb(obj.type)
 
