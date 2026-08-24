@@ -44,6 +44,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -1571,6 +1572,11 @@ fun EditorScreen(
             mutableStateOf(false)
         }
 
+    var rotationStep by
+        remember {
+            mutableStateOf(15f)
+        }
+
     var isPlaying by
         remember {
             mutableStateOf(false)
@@ -1767,7 +1773,7 @@ fun EditorScreen(
                 rotation =
                     (
                         it.rotation +
-                            15f
+                            rotationStep
                         ) % 360f
             )
         }
@@ -1966,6 +1972,13 @@ fun EditorScreen(
                 onToggleSnap = {
                     snapEnabled =
                         !snapEnabled
+                },
+
+                rotationStep =
+                    rotationStep,
+
+                onRotationStepChange = {
+                    rotationStep = it
                 }
             )
 
@@ -2473,7 +2486,9 @@ fun EditorToolBar(
     onScaleUp: () -> Unit,
     onScaleDown: () -> Unit,
     snapEnabled: Boolean,
-    onToggleSnap: () -> Unit
+    onToggleSnap: () -> Unit,
+    rotationStep: Float,
+    onRotationStepChange: (Float) -> Unit
 ) {
 
     Column(
@@ -2581,9 +2596,36 @@ fun EditorToolBar(
             ) {
 
                 Text(
-                    "⟳ +15°"
+                    "⟳ +${rotationStep.roundToInt()}°"
                 )
             }
+
+            var stepText by remember(rotationStep) {
+                mutableStateOf(rotationStep.roundToInt().toString())
+            }
+
+            OutlinedTextField(
+                value = stepText,
+                onValueChange = { newText ->
+                    stepText = newText
+                    newText.toFloatOrNull()?.let {
+                        onRotationStepChange(it)
+                    }
+                },
+                label = {
+                    Text(
+                        text = text(
+                            language,
+                            "Step°",
+                            "الخطوة°"
+                        )
+                    )
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+                modifier = Modifier.width(90.dp)
+            )
 
             Button(
                 onClick =
@@ -2722,6 +2764,22 @@ fun SceneTree(
                 )
             },
 
+            trailingIcon = {
+
+                if (searchQuery.isNotEmpty()) {
+
+                    Text(
+                        text = "✕",
+                        color = Color.Gray,
+                        modifier = Modifier
+                            .clickable {
+                                onSearchChange("")
+                            }
+                            .padding(6.dp)
+                    )
+                }
+            },
+
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -2756,13 +2814,50 @@ fun SceneTree(
                 Modifier.height(3.dp)
         )
 
+        Spacer(
+            modifier =
+                Modifier.height(3.dp)
+        )
+
+        var typeFilter by remember {
+            mutableStateOf("All")
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+
+            listOf("All", "Cube", "Sphere", "Camera", "Light").forEach { filterOption ->
+
+                val active = typeFilter == filterOption
+
+                Text(
+                    text = filterOption,
+                    fontSize = 10.sp,
+                    color = if (active) Color(0xFF00E5FF) else Color.Gray,
+                    modifier = Modifier
+                        .clickable { typeFilter = filterOption }
+                        .padding(3.dp)
+                )
+            }
+        }
+
+        Spacer(
+            modifier =
+                Modifier.height(3.dp)
+        )
+
         val filteredObjects =
             objects.filter {
 
-                it.name.contains(
-                    searchQuery,
-                    ignoreCase = true
-                )
+                (
+                    typeFilter == "All" ||
+                        it.type == typeFilter
+                ) &&
+                    it.name.contains(
+                        searchQuery,
+                        ignoreCase = true
+                    )
             }
 
         LazyColumn(
@@ -3460,15 +3555,48 @@ fun InspectorPanel(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = text(
-                    language,
-                    "COMPONENTS",
-                    "المكونات"
-                ),
-                color = Color(0xFF00E5FF),
-                fontSize = 15.sp
-            )
+            var expandedTypes by remember(selectedObject.id) {
+                mutableStateOf(setOf<ComponentType>())
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = text(
+                        language,
+                        "COMPONENTS",
+                        "المكونات"
+                    ),
+                    color = Color(0xFF00E5FF),
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Text(
+                    text = text(language, "Expand All", "توسيع الكل"),
+                    color = Color.Gray,
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .clickable {
+                            expandedTypes = selectedObject.components.components
+                                .map { it.type }
+                                .toSet()
+                        }
+                        .padding(horizontal = 4.dp)
+                )
+
+                Text(
+                    text = text(language, "Collapse", "طي الكل"),
+                    color = Color.Gray,
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .clickable { expandedTypes = emptySet() }
+                        .padding(horizontal = 4.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(4.dp))
 
@@ -3478,6 +3606,14 @@ fun InspectorPanel(
                     objectId = selectedObject.id,
                     component = component,
                     language = language,
+                    expanded = component.type in expandedTypes,
+                    onToggleExpand = {
+                        expandedTypes = if (component.type in expandedTypes) {
+                            expandedTypes - component.type
+                        } else {
+                            expandedTypes + component.type
+                        }
+                    },
                     onUpdate = onUpdateComponent,
                     onRemove = onRemoveComponent
                 )
@@ -3537,6 +3673,132 @@ fun componentIcon(type: ComponentType): String {
 }
 
 
+fun componentAccentColor(type: ComponentType): Color {
+
+    return when (type) {
+        ComponentType.TRANSFORM -> Color(0xFF64748B)
+        ComponentType.MESH_RENDERER -> Color(0xFF3B82F6)
+        ComponentType.LIGHT -> Color(0xFFEAB308)
+        ComponentType.CAMERA -> Color(0xFFF97316)
+        ComponentType.COLLIDER -> Color(0xFF22C55E)
+    }
+}
+
+
+/* =========================================================
+   AXIS FIELD (Godot-style colored X/Y/Z)
+   ========================================================= */
+
+@Composable
+fun AxisField(
+    axisLabel: String,
+    axisColor: Color,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+
+    var text by remember(value) {
+        mutableStateOf(
+            if (value == value.toInt().toFloat()) {
+                value.toInt().toString()
+            } else {
+                value.toString()
+            }
+        )
+    }
+
+    OutlinedTextField(
+        value = text,
+        onValueChange = { newText ->
+            text = newText
+            newText.toFloatOrNull()?.let { parsed ->
+                onValueChange(parsed)
+            }
+        },
+        label = {
+            Text(axisLabel, color = axisColor)
+        },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number
+        ),
+        modifier = modifier
+    )
+}
+
+
+/* =========================================================
+   VECTOR3 ROW (Godot-style compact XYZ with reset)
+   ========================================================= */
+
+@Composable
+fun Vector3Row(
+    label: String,
+    language: String,
+    x: Float,
+    y: Float,
+    z: Float,
+    defaultValue: Float,
+    onXChange: (Float) -> Unit,
+    onYChange: (Float) -> Unit,
+    onZChange: (Float) -> Unit,
+    onResetAll: () -> Unit
+) {
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+
+        Text(
+            text = label,
+            color = Color.Gray,
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f)
+        )
+
+        Text(
+            text = "↺",
+            color = Color.Gray,
+            modifier = Modifier
+                .clickable { onResetAll() }
+                .padding(4.dp)
+        )
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+
+        AxisField(
+            axisLabel = "X",
+            axisColor = Color(0xFFEF4444),
+            value = x,
+            onValueChange = onXChange,
+            modifier = Modifier.weight(1f)
+        )
+
+        AxisField(
+            axisLabel = "Y",
+            axisColor = Color(0xFF22C55E),
+            value = y,
+            onValueChange = onYChange,
+            modifier = Modifier.weight(1f)
+        )
+
+        AxisField(
+            axisLabel = "Z",
+            axisColor = Color(0xFF3B82F6),
+            value = z,
+            onValueChange = onZChange,
+            modifier = Modifier.weight(1f)
+        )
+    }
+
+    Spacer(modifier = Modifier.height(4.dp))
+}
+
+
 /* =========================================================
    COMPONENT NUMBER FIELD
    ========================================================= */
@@ -3584,43 +3846,54 @@ fun ComponentCard(
     objectId: Int,
     component: ComponentData,
     language: String,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
     onUpdate: (Int, ComponentType, (ComponentData) -> ComponentData) -> Unit,
     onRemove: (Int, ComponentType) -> Unit
 ) {
 
-    var expanded by remember(component.type) {
-        mutableStateOf(false)
-    }
-
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFF162032))
-            .padding(6.dp)
+            .alpha(if (component.enabled) 1f else 0.45f)
     ) {
 
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .clickable { expanded = !expanded },
-            verticalAlignment = Alignment.CenterVertically
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(componentAccentColor(component.type))
+        )
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .background(Color(0xFF162032))
+                .padding(6.dp)
         ) {
 
-            Text(
-                text = componentIcon(component.type) + " " +
-                    componentDisplayName(component.type, language),
-                color = Color.White,
-                modifier = Modifier.weight(1f)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onToggleExpand() },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
 
-            Switch(
-                checked = component.enabled,
-                onCheckedChange = { checked ->
-                    onUpdate(objectId, component.type) {
-                        it.copy(enabled = checked)
+                Text(
+                    text = componentIcon(component.type) + " " +
+                        componentDisplayName(component.type, language),
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Switch(
+                    checked = component.enabled,
+                    onCheckedChange = { checked ->
+                        onUpdate(objectId, component.type) {
+                            it.copy(enabled = checked)
+                        }
                     }
-                }
-            )
+                )
 
             Text(
                 text = "✕",
@@ -3641,50 +3914,68 @@ fun ComponentCard(
 
                 ComponentType.TRANSFORM -> {
 
-                    ComponentNumberField(
-                        label = "Position X",
-                        value = component.positionX
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(positionX = it) } }
+                    Vector3Row(
+                        label = text(language, "Position", "الموقع"),
+                        language = language,
+                        x = component.positionX,
+                        y = component.positionY,
+                        z = component.positionZ,
+                        defaultValue = 0f,
+                        onXChange = { onUpdate(objectId, component.type) { c -> c.copy(positionX = it) } },
+                        onYChange = { onUpdate(objectId, component.type) { c -> c.copy(positionY = it) } },
+                        onZChange = { onUpdate(objectId, component.type) { c -> c.copy(positionZ = it) } },
+                        onResetAll = {
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(positionX = 0f, positionY = 0f, positionZ = 0f)
+                            }
+                        }
+                    )
 
-                    ComponentNumberField(
-                        label = "Position Y",
-                        value = component.positionY
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(positionY = it) } }
+                    Vector3Row(
+                        label = text(language, "Rotation", "الدوران"),
+                        language = language,
+                        x = component.rotationX,
+                        y = component.rotationY,
+                        z = component.rotationZ,
+                        defaultValue = 0f,
+                        onXChange = { onUpdate(objectId, component.type) { c -> c.copy(rotationX = it) } },
+                        onYChange = { onUpdate(objectId, component.type) { c -> c.copy(rotationY = it) } },
+                        onZChange = { onUpdate(objectId, component.type) { c -> c.copy(rotationZ = it) } },
+                        onResetAll = {
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(rotationX = 0f, rotationY = 0f, rotationZ = 0f)
+                            }
+                        }
+                    )
 
-                    ComponentNumberField(
-                        label = "Position Z",
-                        value = component.positionZ
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(positionZ = it) } }
-
-                    ComponentNumberField(
-                        label = "Rotation X",
-                        value = component.rotationX
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(rotationX = it) } }
-
-                    ComponentNumberField(
-                        label = "Rotation Y",
-                        value = component.rotationY
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(rotationY = it) } }
-
-                    ComponentNumberField(
-                        label = "Rotation Z",
-                        value = component.rotationZ
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(rotationZ = it) } }
-
-                    ComponentNumberField(
-                        label = "Scale X",
-                        value = component.scaleX
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(scaleX = it) } }
-
-                    ComponentNumberField(
-                        label = "Scale Y",
-                        value = component.scaleY
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(scaleY = it) } }
-
-                    ComponentNumberField(
-                        label = "Scale Z",
-                        value = component.scaleZ
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(scaleZ = it) } }
+                    Vector3Row(
+                        label = text(language, "Scale", "الحجم"),
+                        language = language,
+                        x = component.scaleX,
+                        y = component.scaleY,
+                        z = component.scaleZ,
+                        defaultValue = 1f,
+                        onXChange = {
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(scaleX = it.coerceAtLeast(0.01f))
+                            }
+                        },
+                        onYChange = {
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(scaleY = it.coerceAtLeast(0.01f))
+                            }
+                        },
+                        onZChange = {
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(scaleZ = it.coerceAtLeast(0.01f))
+                            }
+                        },
+                        onResetAll = {
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(scaleX = 1f, scaleY = 1f, scaleZ = 1f)
+                            }
+                        }
+                    )
                 }
 
                 ComponentType.MESH_RENDERER -> {
@@ -3713,12 +4004,20 @@ fun ComponentCard(
                     ComponentNumberField(
                         label = "Intensity",
                         value = component.intensity
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(intensity = it) } }
+                    ) {
+                        onUpdate(objectId, component.type) { c ->
+                            c.copy(intensity = it.coerceAtLeast(0f))
+                        }
+                    }
 
                     ComponentNumberField(
                         label = "Range",
                         value = component.range
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(range = it) } }
+                    ) {
+                        onUpdate(objectId, component.type) { c ->
+                            c.copy(range = it.coerceAtLeast(0f))
+                        }
+                    }
 
                     Text(
                         text = text(language, "Color", "اللون"),
@@ -3759,33 +4058,25 @@ fun ComponentCard(
                     ComponentNumberField(
                         label = "Field Of View",
                         value = component.fieldOfView
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(fieldOfView = it) } }
+                    ) {
+                        onUpdate(objectId, component.type) { c ->
+                            c.copy(fieldOfView = it.coerceIn(10f, 120f))
+                        }
+                    }
 
                     ComponentNumberField(
                         label = "Near Clip",
                         value = component.nearClip
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(nearClip = it) } }
+                    ) {
+                        onUpdate(objectId, component.type) { c ->
+                            c.copy(nearClip = it.coerceAtLeast(0.01f))
+                        }
+                    }
 
                     ComponentNumberField(
                         label = "Far Clip",
                         value = component.farClip
-                    ) { onUpdate(objectId, component.type) { c -> c.copy(farClip = it) } }
-                }
-
-                ComponentType.COLLIDER -> {
-
-                    OutlinedTextField(
-                        value = component.colliderShape,
-                        onValueChange = { newValue ->
-                            onUpdate(objectId, component.type) { c ->
-                                c.copy(colliderShape = newValue)
-                            }
-                        },
-                        label = { Text("Shape") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
-        }
-    }
-}
+                    ) {
+                        onUpdate(objectId, component.type) { c ->
+                            c.copy(farClip = it.coerceAtLeast(component.nearClip + 0.1f))
+         
