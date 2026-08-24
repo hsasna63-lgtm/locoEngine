@@ -885,7 +885,7 @@ fun HomeScreen(
                         Modifier
                             .width(
                                 if (
-                                    maxWidth > 700.dp
+                                    this@BoxWithConstraints.maxWidth > 700.dp
                                 ) {
                                     300.dp
                                 } else {
@@ -3161,3 +3161,270 @@ fun EditorViewport(
 
                     verticalArrangement =
                         Arrangement.Center
+                ) {
+
+                    Text(
+                        text =
+                            when (obj.type) {
+                                "Cube" -> "⬛"
+                                "Sphere" -> "●"
+                                "Camera" -> "📷"
+                                else -> "💡"
+                            },
+
+                        fontSize = 20.sp,
+                        color = Color.White
+                    )
+
+                    Text(
+                        text = obj.name,
+                        fontSize = 8.sp,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+
+/* =========================================================
+   INSPECTOR
+   ========================================================= */
+
+@Composable
+fun InspectorPanel(
+    objects: List<GameObject>,
+    selectedObjectId: Int?,
+    language: String,
+    onDelete: (Int) -> Unit,
+    onDuplicate: (Int) -> Unit,
+    onRename: (Int, String) -> Unit,
+    onResetTransform: (Int) -> Unit,
+    worldBackgroundColor: Color,
+    onWorldBackgroundColorChange: (Color) -> Unit,
+    onAddComponent: (Int, ComponentType) -> Unit,
+    compact: Boolean = false
+) {
+
+    val selectedObject =
+        objects.firstOrNull {
+            it.id == selectedObjectId
+        }
+
+    Column(
+        modifier =
+            Modifier
+                .width(200.dp)
+                .fillMaxHeight()
+                .background(Color(0xFF0B1220))
+                .padding(10.dp)
+    ) {
+
+        Text(
+            text = text(
+                language,
+                "INSPECTOR",
+                "الخصائص"
+            ),
+            color = Color(0xFF00E5FF),
+            fontSize = 18.sp
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = text(
+                language,
+                "World Background",
+                "خلفية العالم"
+            ),
+            color = Color.Gray
+        )
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+
+            val presets = listOf(
+                Color(0xFF182233),
+                Color(0xFF1B1B1B),
+                Color(0xFF223311),
+                Color(0xFF2B1730)
+            )
+
+            presets.forEach { presetColor ->
+
+                Box(
+                    modifier = Modifier
+                        .width(26.dp)
+                        .height(26.dp)
+                        .background(presetColor)
+                        .border(
+                            width = if (presetColor == worldBackgroundColor) {
+                                2.dp
+                            } else {
+                                1.dp
+                            },
+                            color = Color.White
+                        )
+                        .clickable {
+                            onWorldBackgroundColorChange(presetColor)
+                        }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (selectedObject == null) {
+
+            Text(
+                text = text(
+                    language,
+                    "Select an object",
+                    "حدد عنصرًا"
+                ),
+                color = Color.Gray
+            )
+
+        } else {
+
+            var renameText by remember(selectedObject.id) {
+                mutableStateOf(selectedObject.name)
+            }
+
+            OutlinedTextField(
+                value = renameText,
+                onValueChange = {
+                    renameText = it
+                    onRename(selectedObject.id, it)
+                },
+                label = {
+                    Text(
+                        text = text(
+                            language,
+                            "Name",
+                            "الاسم"
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            Text(
+                text = text(
+                    language,
+                    "Type: ${selectedObject.type}",
+                    "النوع: ${selectedObject.type}"
+                ),
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            Text(
+                text = "X: ${selectedObject.x.roundToInt()}  Y: ${selectedObject.y.roundToInt()}",
+                color = Color.White
+            )
+
+            Text(
+                text = text(
+                    language,
+                    "Rotation: ${selectedObject.rotation.roundToInt()}°",
+                    "الدوران: ${selectedObject.rotation.roundToInt()}°"
+                ),
+                color = Color.White
+            )
+
+            Text(
+                text = text(
+                    language,
+                    "Scale: %.1f".format(selectedObject.scale),
+                    "الحجم: %.1f".format(selectedObject.scale)
+                ),
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+
+                Button(
+                    onClick = { onDuplicate(selectedObject.id) }
+                ) {
+                    Text(text = text(language, "DUP", "نسخ"))
+                }
+
+                OutlinedButton(
+                    onClick = { onResetTransform(selectedObject.id) }
+                ) {
+                    Text(text = text(language, "RESET", "إعادة ضبط"))
+                }
+
+                OutlinedButton(
+                    onClick = { onDelete(selectedObject.id) }
+                ) {
+                    Text(text = text(language, "DELETE", "حذف"))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = text(
+                    language,
+                    "COMPONENTS",
+                    "المكونات"
+                ),
+                color = Color(0xFF00E5FF),
+                fontSize = 15.sp
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            selectedObject.components.components.forEach { component ->
+
+                Text(
+                    text = "• " + componentDisplayName(component.type, language),
+                    color = Color.White,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val missingTypes = ComponentType.values().filter {
+                !selectedObject.components.has(it)
+            }
+
+            if (missingTypes.isNotEmpty()) {
+
+                Text(
+                    text = text(
+                        language,
+                        "+ Add Component",
+                        "+ إضافة مكوّن"
+                    ),
+                    color = Color.Gray
+                )
+
+                missingTypes.forEach { type ->
+
+                    OutlinedButton(
+                        onClick = {
+                            onAddComponent(selectedObject.id, type)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(componentDisplayName(type, language))
+                    }
+                }
+            }
+        }
+    }
+}
