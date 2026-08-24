@@ -127,6 +127,15 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     @Volatile
     var renderObjects: List<RenderObject3D> = emptyList()
 
+    @Volatile
+    var yawDeg = 45f
+
+    @Volatile
+    var pitchDeg = 30f
+
+    @Volatile
+    var distance = 11f
+
     private var program = 0
     private lateinit var vertexBuffer: FloatBuffer
     private lateinit var indexBuffer: java.nio.ShortBuffer
@@ -194,13 +203,6 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
         GLES20.glAttachShader(program, vertexShader)
         GLES20.glAttachShader(program, fragmentShader)
         GLES20.glLinkProgram(program)
-
-        Matrix.setLookAtM(
-            viewMatrix, 0,
-            6f, 5f, 9f,
-            0f, 0f, 0f,
-            0f, 1f, 0f
-        )
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -208,10 +210,30 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
         GLES20.glViewport(0, 0, width, height)
         aspect = if (height == 0) 1f else width.toFloat() / height.toFloat()
         Matrix.perspectiveM(projMatrix, 0, 55f, aspect, 0.1f, 100f)
+    }
+
+    private fun updateViewMatrix() {
+
+        val yawRad = Math.toRadians(yawDeg.toDouble())
+        val pitchRad = Math.toRadians(pitchDeg.toDouble())
+
+        val eyeX = (distance * cos(pitchRad) * sin(yawRad)).toFloat()
+        val eyeY = (distance * sin(pitchRad)).toFloat()
+        val eyeZ = (distance * cos(pitchRad) * cos(yawRad)).toFloat()
+
+        Matrix.setLookAtM(
+            viewMatrix, 0,
+            eyeX, eyeY, eyeZ,
+            0f, 0f, 0f,
+            0f, 1f, 0f
+        )
+
         Matrix.multiplyMM(viewProjMatrix, 0, projMatrix, 0, viewMatrix, 0)
     }
 
     override fun onDrawFrame(gl: GL10?) {
+
+        updateViewMatrix()
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(program)
@@ -299,6 +321,37 @@ fun Viewport3DView(
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 tag = renderer
+
+                var lastTouchX = 0f
+                var lastTouchY = 0f
+
+                setOnTouchListener { _, event ->
+
+                    when (event.action) {
+
+                        android.view.MotionEvent.ACTION_DOWN -> {
+                            lastTouchX = event.x
+                            lastTouchY = event.y
+                        }
+
+                        android.view.MotionEvent.ACTION_MOVE -> {
+
+                            val dx = event.x - lastTouchX
+                            val dy = event.y - lastTouchY
+
+                            renderer.yawDeg -= dx * 0.4f
+
+                            renderer.pitchDeg = (
+                                renderer.pitchDeg - dy * 0.4f
+                            ).coerceIn(-85f, 85f)
+
+                            lastTouchX = event.x
+                            lastTouchY = event.y
+                        }
+                    }
+
+                    true
+                }
             }
         },
 
