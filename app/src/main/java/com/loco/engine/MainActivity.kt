@@ -4079,4 +4079,24 @@ fun ComponentCard(
                     ) {
                         onUpdate(objectId, component.type) { c ->
                             c.copy(farClip = it.coerceAtLeast(component.nearClip + 0.1f))
-         
+                        }
+                    }
+                }
+
+                ComponentType.COLLIDER -> {
+
+                    OutlinedTextField(
+                        value = component.colliderShape,
+                        onValueChange = { newValue ->
+                            onUpdate(objectId, component.type) { c ->
+                                c.copy(colliderShape = newValue)
+                            }
+                        },
+                        label = { Text("Shape") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
+}}
