@@ -621,7 +621,11 @@ fun defaultComponentsForObject(
     when (objectType) {
 
         "Cube",
-        "Sphere" -> {
+        "Sphere",
+        "Plane",
+        "Cylinder",
+        "Cone",
+        "Capsule" -> {
 
             result.add(
                 ComponentType.MESH_RENDERER
