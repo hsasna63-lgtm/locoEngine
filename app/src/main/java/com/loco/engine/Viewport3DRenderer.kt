@@ -135,7 +135,12 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     var pitchDeg = 30f
 
     @Volatile
-    var distance = 11f
+    var distance = 17f
+
+    @Volatile
+    var ambientBrightness = 1f
+
+    var lastAppliedResetTrigger = 0
 
     @Volatile
     var targetX = 0f
@@ -289,7 +294,7 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
             GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0)
 
-            val boost = if (obj.selected) 1.3f else 1f
+            val boost = (if (obj.selected) 1.3f else 1f) * ambientBrightness
             GLES20.glUniform3f(
                 tintHandle,
                 (obj.colorR * boost).coerceAtMost(1f),
@@ -325,6 +330,8 @@ fun Viewport3DView(
     objects: List<GameObject>,
     selectedObjectId: Int?,
     backgroundColor: Color = Color(0xFF182233),
+    ambientBrightness: Float = 1f,
+    resetCameraTrigger: Int = 0,
     modifier: Modifier = Modifier
 ) {
 
@@ -343,29 +350,62 @@ fun Viewport3DView(
 
                 var lastTouchX = 0f
                 var lastTouchY = 0f
+                var lastPinchDistance = 0f
+
+                fun pinchDistance(event: android.view.MotionEvent): Float {
+                    val dx = event.getX(0) - event.getX(1)
+                    val dy = event.getY(0) - event.getY(1)
+                    return kotlin.math.sqrt(dx * dx + dy * dy)
+                }
 
                 setOnTouchListener { _, event ->
 
-                    when (event.action) {
+                    when (event.actionMasked) {
 
                         android.view.MotionEvent.ACTION_DOWN -> {
                             lastTouchX = event.x
                             lastTouchY = event.y
                         }
 
+                        android.view.MotionEvent.ACTION_POINTER_DOWN -> {
+
+                            if (event.pointerCount == 2) {
+                                lastPinchDistance = pinchDistance(event)
+                            }
+                        }
+
                         android.view.MotionEvent.ACTION_MOVE -> {
 
-                            val dx = event.x - lastTouchX
-                            val dy = event.y - lastTouchY
+                            if (event.pointerCount >= 2) {
 
-                            renderer.yawDeg -= dx * 0.4f
+                                val newPinchDistance = pinchDistance(event)
 
-                            renderer.pitchDeg = (
-                                renderer.pitchDeg - dy * 0.4f
-                            ).coerceIn(-85f, 85f)
+                                if (lastPinchDistance > 0f) {
 
-                            lastTouchX = event.x
-                            lastTouchY = event.y
+                                    val zoomDelta =
+                                        (lastPinchDistance - newPinchDistance) * 0.03f
+
+                                    renderer.distance = (
+                                        renderer.distance + zoomDelta
+                                    ).coerceIn(3f, 40f)
+                                }
+
+                                lastPinchDistance = newPinchDistance
+
+                            } else {
+
+                                val dx = event.x - lastTouchX
+                                val dy = event.y - lastTouchY
+
+                                renderer.yawDeg -= dx * 0.4f
+
+                                renderer.pitchDeg = (
+                                    renderer.pitchDeg - dy * 0.4f
+                                ).coerceIn(-85f, 85f)
+
+                                lastTouchX = event.x
+                                lastTouchY = event.y
+                            }
                         }
                     }
 
@@ -381,6 +421,15 @@ fun Viewport3DView(
             renderer.clearR = backgroundColor.red
             renderer.clearG = backgroundColor.green
             renderer.clearB = backgroundColor.blue
+
+            renderer.ambientBrightness = ambientBrightness
+
+            if (renderer.lastAppliedResetTrigger != resetCameraTrigger) {
+                renderer.yawDeg = 45f
+                renderer.pitchDeg = 30f
+                renderer.distance = 17f
+                renderer.lastAppliedResetTrigger = resetCameraTrigger
+            }
 
             val focusedObject = objects.firstOrNull { it.id == selectedObjectId }
 
