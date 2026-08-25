@@ -36,6 +36,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +64,27 @@ import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
+    private fun enableImmersiveMode() {
+
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = (
+            android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or android.view.View.SYSTEM_UI_FLAG_FULLSCREEN
+                or android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            )
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+
+        if (hasFocus) {
+            enableImmersiveMode()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -72,6 +94,8 @@ class MainActivity : ComponentActivity() {
          */
         requestedOrientation =
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+
+        enableImmersiveMode()
 
         val savedProjects =
             loadProjects(this)
@@ -1597,6 +1621,21 @@ fun EditorScreen(
             mutableStateOf(20f)
         }
 
+    var ambientBrightness by
+        remember {
+            mutableStateOf(1f)
+        }
+
+    var resetCameraTrigger by
+        remember {
+            mutableStateOf(0)
+        }
+
+    var showSavedIndicator by
+        remember {
+            mutableStateOf(false)
+        }
+
     var worldBackgroundColor by
         remember(project.name) {
 
@@ -1629,6 +1668,8 @@ fun EditorScreen(
             project,
             objects.toList()
         )
+
+        showSavedIndicator = true
     }
 
     fun pushUndoSnapshot() {
@@ -2004,6 +2045,14 @@ fun EditorScreen(
        EDITOR LAYOUT
        ===================================================== */
 
+    LaunchedEffect(showSavedIndicator) {
+
+        if (showSavedIndicator) {
+            kotlinx.coroutines.delay(900)
+            showSavedIndicator = false
+        }
+    }
+
     BoxWithConstraints(
         modifier =
             Modifier.fillMaxSize()
@@ -2046,6 +2095,9 @@ fun EditorScreen(
                 onUndo = {
                     performUndo()
                 },
+
+                showSavedIndicator =
+                    showSavedIndicator,
 
                 onBack =
                     onBack
@@ -2196,6 +2248,71 @@ fun EditorScreen(
 
                             saveCurrentObjects()
                         }
+                    },
+
+                    onToggleVisibleMultiSelected = {
+
+                        if (multiSelectedIds.isNotEmpty()) {
+
+                            pushUndoSnapshot()
+
+                            val allVisible = objects
+                                .filter { it.id in multiSelectedIds }
+                                .all { it.visible }
+
+                            for (i in objects.indices) {
+
+                                if (objects[i].id in multiSelectedIds) {
+                                    objects[i] = objects[i].copy(
+                                        visible = !allVisible
+                                    )
+                                }
+                            }
+
+                            saveCurrentObjects()
+                        }
+                    },
+
+                    onDuplicateMultiSelected = {
+
+                        if (!isPlaying && multiSelectedIds.isNotEmpty()) {
+
+                            pushUndoSnapshot()
+
+                            var nextId =
+                                (objects.maxOfOrNull { it.id } ?: 0) + 1
+
+                            val toDuplicate =
+                                objects.filter { it.id in multiSelectedIds }
+
+                            val newIds = mutableSetOf<Int>()
+
+                            toDuplicate.forEach { original ->
+
+                                val newComponents =
+                                    ComponentSet(
+                                        original.components
+                                            .components
+                                            .toMutableList()
+                                    )
+
+                                val copy = original.copy(
+                                    id = nextId,
+                                    name = "${original.name} Copy",
+                                    x = original.x + 30f,
+                                    y = original.y + 30f,
+                                    components = newComponents
+                                )
+
+                                objects.add(copy)
+                                newIds.add(nextId)
+                                nextId++
+                            }
+
+                            multiSelectedIds = newIds
+
+                            saveCurrentObjects()
+                        }
                     }
                 )
 
@@ -2242,6 +2359,12 @@ fun EditorScreen(
 
                     backgroundColor =
                         worldBackgroundColor,
+
+                    ambientBrightness =
+                        ambientBrightness,
+
+                    resetCameraTrigger =
+                        resetCameraTrigger,
 
                     modifier =
                         Modifier.weight(
@@ -2406,6 +2529,18 @@ fun EditorScreen(
 
                     onResetAllComponents = { id ->
                         resetAllComponents(id)
+                    },
+
+                    ambientBrightness =
+                        ambientBrightness,
+
+                    onAmbientBrightnessChange = {
+                        ambientBrightness = it
+                    },
+
+                    onResetCamera = {
+                        resetCameraTrigger =
+                            resetCameraTrigger + 1
                     }
                 )
             }
@@ -2502,6 +2637,7 @@ fun EditorTopBar(
     onTogglePlay: () -> Unit,
     canUndo: Boolean,
     onUndo: () -> Unit,
+    showSavedIndicator: Boolean,
     onBack: () -> Unit
 ) {
 
@@ -2549,6 +2685,15 @@ fun EditorTopBar(
             fontSize =
                 16.sp
         )
+
+        if (showSavedIndicator) {
+
+            Text(
+                text = text(language, "✓ Saved", "✓ تم الحفظ"),
+                color = Color(0xFF22C55E),
+                fontSize = 11.sp
+            )
+        }
 
         Row(
             horizontalArrangement =
@@ -2932,6 +3077,8 @@ fun SceneTree(
     onToggleMultiSelect: (Int) -> Unit,
     onSelectAll: (Set<Int>) -> Unit,
     onDeleteMultiSelected: () -> Unit,
+    onToggleVisibleMultiSelected: () -> Unit,
+    onDuplicateMultiSelected: () -> Unit,
     compact: Boolean = false
 ) {
 
@@ -3119,6 +3266,24 @@ fun SceneTree(
                         .clickable { onDeleteMultiSelected() }
                         .padding(2.dp)
                 )
+
+                Text(
+                    text = "👁/🚫",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    modifier = Modifier
+                        .clickable { onToggleVisibleMultiSelected() }
+                        .padding(2.dp)
+                )
+
+                Text(
+                    text = "⧉",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    modifier = Modifier
+                        .clickable { onDuplicateMultiSelected() }
+                        .padding(2.dp)
+                )
             }
         }
 
@@ -3167,6 +3332,15 @@ fun SceneTree(
                             .clickable { onToggleMultiSelect(obj.id) }
                             .padding(horizontal = 3.dp)
                     )
+
+                    Box(
+                        modifier = Modifier
+                            .width(8.dp)
+                            .height(8.dp)
+                            .background(objectTypeColor(obj.type))
+                    )
+
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     Text(
                         text =
@@ -3388,6 +3562,8 @@ fun EditorViewport(
         Modifier,
     backgroundColor: Color =
         Color(0xFF182233),
+    ambientBrightness: Float = 1f,
+    resetCameraTrigger: Int = 0,
     compact: Boolean = false
 ) {
 
@@ -3418,6 +3594,12 @@ fun EditorViewport(
 
                 backgroundColor =
                     backgroundColor,
+
+                ambientBrightness =
+                    ambientBrightness,
+
+                resetCameraTrigger =
+                    resetCameraTrigger,
 
                 modifier =
                     Modifier.fillMaxSize()
@@ -3659,6 +3841,9 @@ fun InspectorPanel(
     onUpdateComponent: (Int, ComponentType, (ComponentData) -> ComponentData) -> Unit,
     onRemoveComponent: (Int, ComponentType) -> Unit,
     onResetAllComponents: (Int) -> Unit,
+    ambientBrightness: Float,
+    onAmbientBrightnessChange: (Float) -> Unit,
+    onResetCamera: () -> Unit,
     compact: Boolean = false
 ) {
 
@@ -3729,6 +3914,61 @@ fun InspectorPanel(
                         }
                 )
             }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Text(
+                text = text(language, "Brightness", "السطوع"),
+                color = Color.Gray,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f)
+            )
+
+            Text(
+                text = "-",
+                color = Color.White,
+                modifier = Modifier
+                    .clickable {
+                        onAmbientBrightnessChange(
+                            (ambientBrightness - 0.1f).coerceAtLeast(0.3f)
+                        )
+                    }
+                    .padding(horizontal = 8.dp)
+            )
+
+            Text(
+                text = "%.1f".format(ambientBrightness),
+                color = Color.White,
+                fontSize = 11.sp
+            )
+
+            Text(
+                text = "+",
+                color = Color.White,
+                modifier = Modifier
+                    .clickable {
+                        onAmbientBrightnessChange(
+                            (ambientBrightness + 0.1f).coerceAtMost(2f)
+                        )
+                    }
+                    .padding(horizontal = 8.dp)
+            )
+        }
+
+        OutlinedButton(
+            onClick = onResetCamera,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Text(
+                text = text(language, "🎥 Reset Camera", "🎥 إعادة ضبط الكاميرا")
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
