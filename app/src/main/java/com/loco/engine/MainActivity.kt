@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -309,6 +311,24 @@ fun objectTypeColor(
 
         "Camera" ->
             Color(0xFFF97316)
+
+        "Light" ->
+            Color(0xFFEAB308)
+
+        "Plane" ->
+            Color(0xFF64748B)
+
+        "Cylinder" ->
+            Color(0xFFA855F7)
+
+        "Cone" ->
+            Color(0xFFEC4899)
+
+        "Capsule" ->
+            Color(0xFF14B8A6)
+
+        "Empty" ->
+            Color(0xFF94A3B8)
 
         else ->
             Color(0xFFEAB308)
@@ -2616,11 +2636,29 @@ fun EditorScreen(
                             "Sphere" ->
                                 "Sphere $newId"
 
+                            "Plane" ->
+                                "Plane $newId"
+
+                            "Cylinder" ->
+                                "Cylinder $newId"
+
+                            "Cone" ->
+                                "Cone $newId"
+
+                            "Capsule" ->
+                                "Capsule $newId"
+
+                            "Empty" ->
+                                "Empty $newId"
+
                             "Camera" ->
                                 "Camera $newId"
 
-                            else ->
+                            "Light" ->
                                 "Light $newId"
+
+                            else ->
+                                "$objectType $newId"
                         }
 
                     objects.add(
@@ -3246,10 +3284,14 @@ fun SceneTree(
         }
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState())
         ) {
 
-            listOf("All", "Cube", "Sphere", "Camera", "Light").forEach { filterOption ->
+            listOf(
+                "All", "Cube", "Sphere", "Plane", "Cylinder",
+                "Cone", "Capsule", "Empty", "Camera", "Light"
+            ).forEach { filterOption ->
 
                 val active = typeFilter == filterOption
 
@@ -3556,7 +3598,11 @@ fun AddObjectDialog(
 
         text = {
 
-            Column {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 380.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
 
                 ObjectButton(
                     "Cube",
@@ -3572,6 +3618,46 @@ fun AddObjectDialog(
                     language
                 ) {
                     onAdd("Sphere")
+                }
+
+                ObjectButton(
+                    "Plane",
+                    "مستوٍ",
+                    language
+                ) {
+                    onAdd("Plane")
+                }
+
+                ObjectButton(
+                    "Cylinder",
+                    "أسطوانة",
+                    language
+                ) {
+                    onAdd("Cylinder")
+                }
+
+                ObjectButton(
+                    "Cone",
+                    "مخروط",
+                    language
+                ) {
+                    onAdd("Cone")
+                }
+
+                ObjectButton(
+                    "Capsule",
+                    "كبسولة",
+                    language
+                ) {
+                    onAdd("Capsule")
+                }
+
+                ObjectButton(
+                    "Empty",
+                    "فارغ",
+                    language
+                ) {
+                    onAdd("Empty")
                 }
 
                 ObjectButton(
@@ -3908,8 +3994,14 @@ fun EditorViewport(
                             when (obj.type) {
                                 "Cube" -> "⬛"
                                 "Sphere" -> "●"
+                                "Plane" -> "▬"
+                                "Cylinder" -> "🛢"
+                                "Cone" -> "🔺"
+                                "Capsule" -> "💊"
+                                "Empty" -> "◌"
                                 "Camera" -> "📷"
-                                else -> "💡"
+                                "Light" -> "💡"
+                                else -> "❔"
                             },
 
                         fontSize = 20.sp,
