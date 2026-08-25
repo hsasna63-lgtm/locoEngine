@@ -163,6 +163,13 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     private var indexCount = 0
     private val strideBytes = 6 * 4
 
+    private lateinit var floorVertexBuffer: FloatBuffer
+    private lateinit var floorIndexBuffer: java.nio.ShortBuffer
+    private var floorIndexCount = 0
+
+    private lateinit var gridVertexBuffer: FloatBuffer
+    private var gridVertexCount = 0
+
     private var aspect = 1f
     private val projMatrix = FloatArray(16)
     private val viewMatrix = FloatArray(16)
@@ -191,6 +198,64 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
             .order(ByteOrder.nativeOrder())
             .asShortBuffer()
             .apply { put(indexData); position(0) }
+
+        val floorY = -2f
+        val floorSize = 40f
+        val floorShade = floatArrayOf(0.16f, 0.18f, 0.22f)
+
+        val floorVerts = floatArrayOf(
+            -floorSize, floorY, -floorSize, floorShade[0], floorShade[1], floorShade[2],
+            floorSize, floorY, -floorSize, floorShade[0], floorShade[1], floorShade[2],
+            floorSize, floorY, floorSize, floorShade[0], floorShade[1], floorShade[2],
+            -floorSize, floorY, floorSize, floorShade[0], floorShade[1], floorShade[2]
+        )
+        val floorIdx = shortArrayOf(0, 1, 2, 0, 2, 3)
+        floorIndexCount = floorIdx.size
+
+        floorVertexBuffer = ByteBuffer
+            .allocateDirect(floorVerts.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { put(floorVerts); position(0) }
+
+        floorIndexBuffer = ByteBuffer
+            .allocateDirect(floorIdx.size * 2)
+            .order(ByteOrder.nativeOrder())
+            .asShortBuffer()
+            .apply { put(floorIdx); position(0) }
+
+        val gridLines = mutableListOf<Float>()
+        val gridShade = floatArrayOf(0.32f, 0.36f, 0.42f)
+        val gridY = floorY + 0.01f
+        var g = -floorSize
+
+        while (g <= floorSize) {
+
+            gridLines.addAll(
+                listOf(
+                    g, gridY, -floorSize, gridShade[0], gridShade[1], gridShade[2],
+                    g, gridY, floorSize, gridShade[0], gridShade[1], gridShade[2]
+                )
+            )
+
+            gridLines.addAll(
+                listOf(
+                    -floorSize, gridY, g, gridShade[0], gridShade[1], gridShade[2],
+                    floorSize, gridY, g, gridShade[0], gridShade[1], gridShade[2]
+                )
+            )
+
+            g += 4f
+        }
+
+        val gridArray = gridLines.toFloatArray()
+        gridVertexCount = gridArray.size / 6
+
+        gridVertexBuffer = ByteBuffer
+            .allocateDirect(gridArray.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { put(gridArray); position(0) }
 
         val vertexSrc = listOf(
             "uniform mat4 uMVPMatrix;",
@@ -280,6 +345,39 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
         val objectsSnapshot = renderObjects
 
+        // ---- draw floor plane ----
+        floorVertexBuffer.position(0)
+        GLES20.glVertexAttribPointer(
+            positionHandle, 3, GLES20.GL_FLOAT, false, strideBytes, floorVertexBuffer
+        )
+        floorVertexBuffer.position(3)
+        GLES20.glVertexAttribPointer(
+            shadeHandle, 3, GLES20.GL_FLOAT, false, strideBytes, floorVertexBuffer
+        )
+
+        Matrix.setIdentityM(modelMatrix, 0)
+        Matrix.multiplyMM(mvpMatrix, 0, viewProjMatrix, 0, modelMatrix, 0)
+        GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0)
+        GLES20.glUniform3f(tintHandle, ambientBrightness, ambientBrightness, ambientBrightness)
+
+        floorIndexBuffer.position(0)
+        GLES20.glDrawElements(
+            GLES20.GL_TRIANGLES, floorIndexCount, GLES20.GL_UNSIGNED_SHORT, floorIndexBuffer
+        )
+
+        // ---- draw grid lines ----
+        gridVertexBuffer.position(0)
+        GLES20.glVertexAttribPointer(
+            positionHandle, 3, GLES20.GL_FLOAT, false, strideBytes, gridVertexBuffer
+        )
+        gridVertexBuffer.position(3)
+        GLES20.glVertexAttribPointer(
+            shadeHandle, 3, GLES20.GL_FLOAT, false, strideBytes, gridVertexBuffer
+        )
+
+        GLES20.glDrawArrays(GLES20.GL_LINES, 0, gridVertexCount)
+
+        // ---- draw scene objects ----
         for (obj in objectsSnapshot) {
 
             val worldX = obj.x / 40f
@@ -321,6 +419,12 @@ fun objectTypeColorRgb(type: String): Triple<Float, Float, Float> {
         "Cube" -> Triple(0.23f, 0.51f, 0.96f)
         "Sphere" -> Triple(0.13f, 0.77f, 0.37f)
         "Camera" -> Triple(0.98f, 0.45f, 0.09f)
+        "Light" -> Triple(0.92f, 0.7f, 0.03f)
+        "Plane" -> Triple(0.39f, 0.45f, 0.55f)
+        "Cylinder" -> Triple(0.66f, 0.33f, 0.97f)
+        "Cone" -> Triple(0.93f, 0.28f, 0.6f)
+        "Capsule" -> Triple(0.08f, 0.72f, 0.65f)
+        "Empty" -> Triple(0.58f, 0.64f, 0.72f)
         else -> Triple(0.92f, 0.7f, 0.03f)
     }
 }
@@ -351,11 +455,21 @@ fun Viewport3DView(
                 var lastTouchX = 0f
                 var lastTouchY = 0f
                 var lastPinchDistance = 0f
+                var lastMidX = 0f
+                var lastMidY = 0f
 
                 fun pinchDistance(event: android.view.MotionEvent): Float {
                     val dx = event.getX(0) - event.getX(1)
                     val dy = event.getY(0) - event.getY(1)
                     return kotlin.math.sqrt(dx * dx + dy * dy)
+                }
+
+                fun midX(event: android.view.MotionEvent): Float {
+                    return (event.getX(0) + event.getX(1)) / 2f
+                }
+
+                fun midY(event: android.view.MotionEvent): Float {
+                    return (event.getY(0) + event.getY(1)) / 2f
                 }
 
                 setOnTouchListener { _, event ->
@@ -371,6 +485,8 @@ fun Viewport3DView(
 
                             if (event.pointerCount == 2) {
                                 lastPinchDistance = pinchDistance(event)
+                                lastMidX = midX(event)
+                                lastMidY = midY(event)
                             }
                         }
 
@@ -379,6 +495,8 @@ fun Viewport3DView(
                             if (event.pointerCount >= 2) {
 
                                 val newPinchDistance = pinchDistance(event)
+                                val newMidX = midX(event)
+                                val newMidY = midY(event)
 
                                 if (lastPinchDistance > 0f) {
 
@@ -388,9 +506,23 @@ fun Viewport3DView(
                                     renderer.distance = (
                                         renderer.distance + zoomDelta
                                     ).coerceIn(3f, 40f)
+
+                                    val panScale = renderer.distance * 0.0025f
+                                    val panDx = (newMidX - lastMidX) * panScale
+                                    val panDy = (newMidY - lastMidY) * panScale
+
+                                    val yawRad = Math.toRadians(renderer.yawDeg.toDouble())
+                                    val cosYaw = kotlin.math.cos(yawRad).toFloat()
+                                    val sinYaw = kotlin.math.sin(yawRad).toFloat()
+
+                                    renderer.targetX -= panDx * cosYaw
+                                    renderer.targetY += panDx * sinYaw
+                                    renderer.targetY += panDy * cosYaw
                                 }
 
                                 lastPinchDistance = newPinchDistance
+                                lastMidX = newMidX
+                                lastMidY = newMidY
 
                             } else {
 
