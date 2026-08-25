@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -1611,6 +1612,11 @@ fun EditorScreen(
             mutableStateOf<List<GameObject>?>(null)
         }
 
+    var redoSnapshot by
+        remember {
+            mutableStateOf<List<GameObject>?>(null)
+        }
+
     var multiSelectedIds by
         remember {
             mutableStateOf(setOf<Int>())
@@ -1675,6 +1681,7 @@ fun EditorScreen(
     fun pushUndoSnapshot() {
 
         undoSnapshot = objects.toList()
+        redoSnapshot = null
     }
 
     fun performUndo() {
@@ -1682,12 +1689,29 @@ fun EditorScreen(
         val snapshot =
             undoSnapshot ?: return
 
+        redoSnapshot = objects.toList()
+
         objects.clear()
         objects.addAll(snapshot)
 
         saveCurrentObjects()
 
         undoSnapshot = null
+    }
+
+    fun performRedo() {
+
+        val snapshot =
+            redoSnapshot ?: return
+
+        undoSnapshot = objects.toList()
+
+        objects.clear()
+        objects.addAll(snapshot)
+
+        saveCurrentObjects()
+
+        redoSnapshot = null
     }
 
     fun updateObject(
@@ -2094,6 +2118,13 @@ fun EditorScreen(
 
                 onUndo = {
                     performUndo()
+                },
+
+                canRedo =
+                    redoSnapshot != null,
+
+                onRedo = {
+                    performRedo()
                 },
 
                 showSavedIndicator =
@@ -2637,6 +2668,8 @@ fun EditorTopBar(
     onTogglePlay: () -> Unit,
     canUndo: Boolean,
     onUndo: () -> Unit,
+    canRedo: Boolean,
+    onRedo: () -> Unit,
     showSavedIndicator: Boolean,
     onBack: () -> Unit
 ) {
@@ -2714,6 +2747,23 @@ fun EditorTopBar(
                             language,
                             "↶ UNDO",
                             "↶ تراجع"
+                        ),
+                        color = Color(0xFFFACC15)
+                    )
+                }
+            }
+
+            if (canRedo) {
+
+                TextButton(
+                    onClick = onRedo
+                ) {
+
+                    Text(
+                        text = text(
+                            language,
+                            "↷ REDO",
+                            "↷ إعادة"
                         ),
                         color = Color(0xFFFACC15)
                     )
@@ -3085,7 +3135,7 @@ fun SceneTree(
     Column(
         modifier =
             Modifier
-                .width(150.dp)
+                .width(210.dp)
                 .fillMaxHeight()
                 .background(
                     Color(0xFF0B1220)
@@ -3191,6 +3241,10 @@ fun SceneTree(
             mutableStateOf("All")
         }
 
+        var sortAscending by remember {
+            mutableStateOf(true)
+        }
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
@@ -3199,15 +3253,30 @@ fun SceneTree(
 
                 val active = typeFilter == filterOption
 
+                val countLabel = if (filterOption == "All") {
+                    objects.size
+                } else {
+                    objects.count { it.type == filterOption }
+                }
+
                 Text(
-                    text = filterOption,
-                    fontSize = 10.sp,
+                    text = "$filterOption($countLabel)",
+                    fontSize = 9.sp,
                     color = if (active) Color(0xFF00E5FF) else Color.Gray,
                     modifier = Modifier
                         .clickable { typeFilter = filterOption }
                         .padding(3.dp)
                 )
             }
+
+            Text(
+                text = if (sortAscending) "A-Z" else "Z-A",
+                fontSize = 9.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .clickable { sortAscending = !sortAscending }
+                    .padding(3.dp)
+            )
         }
 
         Spacer(
@@ -3226,6 +3295,13 @@ fun SceneTree(
                         searchQuery,
                         ignoreCase = true
                     )
+            }.let { list ->
+
+                if (sortAscending) {
+                    list.sortedBy { it.name }
+                } else {
+                    list.sortedByDescending { it.name }
+                }
             }
 
         Row(
@@ -3249,6 +3325,18 @@ fun SceneTree(
                 color = Color.Gray,
                 modifier = Modifier
                     .clickable { onSelectAll(emptySet()) }
+                    .padding(2.dp)
+            )
+
+            Text(
+                text = text(language, "Invert", "عكس"),
+                fontSize = 10.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .clickable {
+                        val allIds = filteredObjects.map { it.id }.toSet()
+                        onSelectAll(allIds - multiSelectedIds)
+                    }
                     .padding(2.dp)
             )
 
@@ -3294,7 +3382,9 @@ fun SceneTree(
 
         LazyColumn(
             modifier =
-                Modifier.weight(1f)
+                Modifier.weight(1f),
+            verticalArrangement =
+                Arrangement.spacedBy(2.dp)
         ) {
 
             items(
@@ -3319,7 +3409,7 @@ fun SceneTree(
                                     obj.id
                                 )
                             }
-                            .padding(5.dp),
+                            .padding(vertical = 4.dp, horizontal = 3.dp),
 
                     verticalAlignment =
                         Alignment.CenterVertically
@@ -3328,19 +3418,27 @@ fun SceneTree(
                     Text(
                         text = if (obj.id in multiSelectedIds) "☑" else "☐",
                         color = Color.Gray,
+                        fontSize = 12.sp,
                         modifier = Modifier
                             .clickable { onToggleMultiSelect(obj.id) }
-                            .padding(horizontal = 3.dp)
+                            .padding(end = 3.dp)
                     )
 
                     Box(
                         modifier = Modifier
-                            .width(8.dp)
-                            .height(8.dp)
+                            .width(10.dp)
+                            .height(10.dp)
                             .background(objectTypeColor(obj.type))
+                            .clickable {
+                                val sameType = objects
+                                    .filter { it.type == obj.type }
+                                    .map { it.id }
+                                    .toSet()
+                                onSelectAll(sameType)
+                            }
                     )
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
 
                     Text(
                         text =
@@ -3366,6 +3464,10 @@ fun SceneTree(
                                 Color.White
                             },
 
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+
                         modifier =
                             Modifier.weight(1f)
                     )
@@ -3379,6 +3481,8 @@ fun SceneTree(
                             } else {
                                 "🚫"
                             },
+
+                        fontSize = 12.sp,
 
                         modifier =
                             Modifier
@@ -3401,6 +3505,8 @@ fun SceneTree(
                             } else {
                                 "🔓"
                             },
+
+                        fontSize = 12.sp,
 
                         modifier =
                             Modifier
@@ -3872,16 +3978,44 @@ fun InspectorPanel(
             fontSize = 18.sp
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
-
         Text(
             text = text(
                 language,
-                "World Background",
-                "خلفية العالم"
+                "${objects.size} objects · ${objects.count { it.visible }} visible",
+                "${objects.size} عنصر · ${objects.count { it.visible }} ظاهر"
             ),
-            color = Color.Gray
+            color = Color.Gray,
+            fontSize = 10.sp
         )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Text(
+                text = text(
+                    language,
+                    "World Background",
+                    "خلفية العالم"
+                ),
+                color = Color.Gray,
+                modifier = Modifier.weight(1f)
+            )
+
+            Text(
+                text = "↺",
+                color = Color(0xFFFACC15),
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable {
+                        onWorldBackgroundColorChange(Color(0xFF182233))
+                    }
+                    .padding(horizontal = 4.dp)
+            )
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -3958,6 +4092,15 @@ fun InspectorPanel(
                         )
                     }
                     .padding(horizontal = 8.dp)
+            )
+
+            Text(
+                text = "↺",
+                color = Color(0xFFFACC15),
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable { onAmbientBrightnessChange(1f) }
+                    .padding(horizontal = 4.dp)
             )
         }
 
