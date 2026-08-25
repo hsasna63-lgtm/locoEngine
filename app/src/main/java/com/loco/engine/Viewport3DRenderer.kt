@@ -138,6 +138,12 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     var distance = 11f
 
     @Volatile
+    var targetX = 0f
+
+    @Volatile
+    var targetY = 0f
+
+    @Volatile
     var clearR = 0.06f
 
     @Volatile
@@ -227,14 +233,14 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
         val yawRad = Math.toRadians(yawDeg.toDouble())
         val pitchRad = Math.toRadians(pitchDeg.toDouble())
 
-        val eyeX = (distance * cos(pitchRad) * sin(yawRad)).toFloat()
-        val eyeY = (distance * sin(pitchRad)).toFloat()
+        val eyeX = targetX + (distance * cos(pitchRad) * sin(yawRad)).toFloat()
+        val eyeY = targetY + (distance * sin(pitchRad)).toFloat()
         val eyeZ = (distance * cos(pitchRad) * cos(yawRad)).toFloat()
 
         Matrix.setLookAtM(
             viewMatrix, 0,
             eyeX, eyeY, eyeZ,
-            0f, 0f, 0f,
+            targetX, targetY, 0f,
             0f, 1f, 0f
         )
 
@@ -375,6 +381,16 @@ fun Viewport3DView(
             renderer.clearR = backgroundColor.red
             renderer.clearG = backgroundColor.green
             renderer.clearB = backgroundColor.blue
+
+            val focusedObject = objects.firstOrNull { it.id == selectedObjectId }
+
+            if (focusedObject != null) {
+                renderer.targetX = focusedObject.x / 40f
+                renderer.targetY = -focusedObject.y / 40f
+            } else {
+                renderer.targetX = 0f
+                renderer.targetY = 0f
+            }
 
             renderer.renderObjects = objects
                 .filter { it.visible }
