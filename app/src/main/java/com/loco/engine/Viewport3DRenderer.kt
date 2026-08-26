@@ -464,6 +464,7 @@ fun Viewport3DView(
     recenterPanTrigger: Int = 0,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
+    isolateMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
 
@@ -612,6 +613,7 @@ fun Viewport3DView(
 
             renderer.renderObjects = objects
                 .filter { it.visible }
+                .filter { !isolateMode || it.id == selectedObjectId }
                 .map { obj ->
 
                 val (r, g, b) = objectTypeColorRgb(obj.type)
