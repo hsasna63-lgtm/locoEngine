@@ -1652,7 +1652,22 @@ fun EditorScreen(
             mutableStateOf(1f)
         }
 
+    var gridSpacing by
+        remember {
+            mutableStateOf(20f)
+        }
+
+    var floorVisible by
+        remember {
+            mutableStateOf(true)
+        }
+
     var resetCameraTrigger by
+        remember {
+            mutableStateOf(0)
+        }
+
+    var recenterPanTrigger by
         remember {
             mutableStateOf(0)
         }
@@ -2417,6 +2432,15 @@ fun EditorScreen(
                     resetCameraTrigger =
                         resetCameraTrigger,
 
+                    recenterPanTrigger =
+                        recenterPanTrigger,
+
+                    gridSpacing =
+                        gridSpacing,
+
+                    floorVisible =
+                        floorVisible,
+
                     modifier =
                         Modifier.weight(
                             1f
@@ -2546,6 +2570,39 @@ fun EditorScreen(
                         }
                     },
 
+                    onDuplicateInPlace = { id ->
+
+                        val original =
+                            objects.firstOrNull { it.id == id }
+
+                        if (original != null && !isPlaying) {
+
+                            pushUndoSnapshot()
+
+                            val newId =
+                                (objects.maxOfOrNull { it.id } ?: 0) + 1
+
+                            val newComponents =
+                                ComponentSet(
+                                    original.components
+                                        .components
+                                        .toMutableList()
+                                )
+
+                            val copy = original.copy(
+                                id = newId,
+                                name = "${original.name} Copy",
+                                components = newComponents
+                            )
+
+                            objects.add(copy)
+
+                            selectedObjectId = newId
+
+                            saveCurrentObjects()
+                        }
+                    },
+
                     onAddComponent = {
                             id,
                             type ->
@@ -2592,6 +2649,23 @@ fun EditorScreen(
                     onResetCamera = {
                         resetCameraTrigger =
                             resetCameraTrigger + 1
+                    },
+
+                    onRecenterPan = {
+                        recenterPanTrigger =
+                            recenterPanTrigger + 1
+                    },
+
+                    gridSpacing = gridSpacing,
+
+                    onGridSpacingChange = {
+                        gridSpacing = it
+                    },
+
+                    floorVisible = floorVisible,
+
+                    onToggleFloorVisible = {
+                        floorVisible = !floorVisible
                     }
                 )
             }
@@ -2607,6 +2681,9 @@ fun EditorScreen(
             AddObjectDialog(
                 language =
                     language,
+
+                currentObjectCount =
+                    objects.size,
 
                 onCancel = {
                     showObjectDialog =
@@ -3575,6 +3652,7 @@ fun SceneTree(
 @Composable
 fun AddObjectDialog(
     language: String,
+    currentObjectCount: Int,
     onCancel: () -> Unit,
     onAdd: (String) -> Unit
 ) {
@@ -3590,8 +3668,8 @@ fun AddObjectDialog(
                 text =
                     text(
                         language,
-                        "Add Object",
-                        "إضافة عنصر"
+                        "Add Object ($currentObjectCount in scene)",
+                        "إضافة عنصر ($currentObjectCount بالمشهد)"
                     )
             )
         },
@@ -3756,6 +3834,9 @@ fun EditorViewport(
         Color(0xFF182233),
     ambientBrightness: Float = 1f,
     resetCameraTrigger: Int = 0,
+    recenterPanTrigger: Int = 0,
+    gridSpacing: Float = 20f,
+    floorVisible: Boolean = true,
     compact: Boolean = false
 ) {
 
@@ -3792,6 +3873,15 @@ fun EditorViewport(
 
                 resetCameraTrigger =
                     resetCameraTrigger,
+
+                recenterPanTrigger =
+                    recenterPanTrigger,
+
+                gridSpacing =
+                    gridSpacing,
+
+                floorVisible =
+                    floorVisible,
 
                 modifier =
                     Modifier.fillMaxSize()
@@ -4031,6 +4121,7 @@ fun InspectorPanel(
     language: String,
     onDelete: (Int) -> Unit,
     onDuplicate: (Int) -> Unit,
+    onDuplicateInPlace: (Int) -> Unit,
     onRename: (Int, String) -> Unit,
     onResetTransform: (Int) -> Unit,
     worldBackgroundColor: Color,
@@ -4042,6 +4133,11 @@ fun InspectorPanel(
     ambientBrightness: Float,
     onAmbientBrightnessChange: (Float) -> Unit,
     onResetCamera: () -> Unit,
+    onRecenterPan: () -> Unit,
+    gridSpacing: Float,
+    onGridSpacingChange: (Float) -> Unit,
+    floorVisible: Boolean,
+    onToggleFloorVisible: () -> Unit,
     compact: Boolean = false
 ) {
 
@@ -4206,6 +4302,55 @@ fun InspectorPanel(
             )
         }
 
+        OutlinedButton(
+            onClick = onRecenterPan,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Text(
+                text = text(language, "🎯 Recenter", "🎯 توسيط فقط")
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            var spacingText by remember(gridSpacing) {
+                mutableStateOf(gridSpacing.roundToInt().toString())
+            }
+
+            OutlinedTextField(
+                value = spacingText,
+                onValueChange = { newText ->
+                    spacingText = newText
+                    newText.toFloatOrNull()?.let {
+                        if (it > 0f) {
+                            onGridSpacingChange(it)
+                        }
+                    }
+                },
+                label = {
+                    Text(text = text(language, "Grid Size", "حجم الشبكة"))
+                },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+                modifier = Modifier.weight(1f)
+            )
+
+            Text(
+                text = if (floorVisible) "🌍" else "🚫",
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .clickable { onToggleFloorVisible() }
+                    .padding(horizontal = 6.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         if (selectedObject == null) {
@@ -4292,6 +4437,12 @@ fun InspectorPanel(
                 }
 
                 OutlinedButton(
+                    onClick = { onDuplicateInPlace(selectedObject.id) }
+                ) {
+                    Text(text = text(language, "DUP ⎘", "نسخ بمكانه"))
+                }
+
+                OutlinedButton(
                     onClick = { onResetTransform(selectedObject.id) }
                 ) {
                     Text(text = text(language, "RESET", "إعادة ضبط"))
@@ -4355,6 +4506,19 @@ fun InspectorPanel(
                     modifier = Modifier
                         .clickable { onResetAllComponents(selectedObject.id) }
                         .padding(horizontal = 4.dp)
+                )
+            }
+
+            if (selectedObject.components.components.isEmpty()) {
+
+                Text(
+                    text = text(
+                        language,
+                        "⚠ No components attached",
+                        "⚠ لا توجد مكونات"
+                    ),
+                    color = Color(0xFFEF4444),
+                    fontSize = 11.sp
                 )
             }
 
