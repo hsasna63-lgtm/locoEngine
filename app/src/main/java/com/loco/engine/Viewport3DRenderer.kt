@@ -135,12 +135,19 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     var pitchDeg = 30f
 
     @Volatile
-    var distance = 17f
+    var distance = 35f
 
     @Volatile
     var ambientBrightness = 1f
 
+    @Volatile
+    var sceneLightContribution = 0f
+
     var lastAppliedResetTrigger = 0
+
+    var gridSpacing = 20f
+
+    var floorVisible = true
 
     @Volatile
     var targetX = 0f
@@ -178,6 +185,48 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     private val mvpMatrix = FloatArray(16)
     private val tintColorLoc = -1
 
+    private val floorY = -2f
+    private val floorSize = 300f
+    private var builtGridSpacing = -1f
+
+    private fun rebuildGridBuffer() {
+
+        val gridLines = mutableListOf<Float>()
+        val gridShade = floatArrayOf(0.32f, 0.36f, 0.42f)
+        val gridY = floorY + 0.01f
+        var g = -floorSize
+
+        while (g <= floorSize) {
+
+            gridLines.addAll(
+                listOf(
+                    g, gridY, -floorSize, gridShade[0], gridShade[1], gridShade[2],
+                    g, gridY, floorSize, gridShade[0], gridShade[1], gridShade[2]
+                )
+            )
+
+            gridLines.addAll(
+                listOf(
+                    -floorSize, gridY, g, gridShade[0], gridShade[1], gridShade[2],
+                    floorSize, gridY, g, gridShade[0], gridShade[1], gridShade[2]
+                )
+            )
+
+            g += gridSpacing
+        }
+
+        val gridArray = gridLines.toFloatArray()
+        gridVertexCount = gridArray.size / 6
+
+        gridVertexBuffer = ByteBuffer
+            .allocateDirect(gridArray.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .apply { put(gridArray); position(0) }
+
+        builtGridSpacing = gridSpacing
+    }
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
 
         GLES20.glClearColor(0.06f, 0.07f, 0.1f, 1f)
@@ -199,8 +248,6 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
             .asShortBuffer()
             .apply { put(indexData); position(0) }
 
-        val floorY = -2f
-        val floorSize = 40f
         val floorShade = floatArrayOf(0.16f, 0.18f, 0.22f)
 
         val floorVerts = floatArrayOf(
@@ -224,38 +271,7 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
             .asShortBuffer()
             .apply { put(floorIdx); position(0) }
 
-        val gridLines = mutableListOf<Float>()
-        val gridShade = floatArrayOf(0.32f, 0.36f, 0.42f)
-        val gridY = floorY + 0.01f
-        var g = -floorSize
-
-        while (g <= floorSize) {
-
-            gridLines.addAll(
-                listOf(
-                    g, gridY, -floorSize, gridShade[0], gridShade[1], gridShade[2],
-                    g, gridY, floorSize, gridShade[0], gridShade[1], gridShade[2]
-                )
-            )
-
-            gridLines.addAll(
-                listOf(
-                    -floorSize, gridY, g, gridShade[0], gridShade[1], gridShade[2],
-                    floorSize, gridY, g, gridShade[0], gridShade[1], gridShade[2]
-                )
-            )
-
-            g += 4f
-        }
-
-        val gridArray = gridLines.toFloatArray()
-        gridVertexCount = gridArray.size / 6
-
-        gridVertexBuffer = ByteBuffer
-            .allocateDirect(gridArray.size * 4)
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .apply { put(gridArray); position(0) }
+        rebuildGridBuffer()
 
         val vertexSrc = listOf(
             "uniform mat4 uMVPMatrix;",
@@ -295,7 +311,7 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
         GLES20.glViewport(0, 0, width, height)
         aspect = if (height == 0) 1f else width.toFloat() / height.toFloat()
-        Matrix.perspectiveM(projMatrix, 0, 55f, aspect, 0.1f, 100f)
+        Matrix.perspectiveM(projMatrix, 0, 55f, aspect, 0.1f, 800f)
     }
 
     private fun updateViewMatrix() {
@@ -345,37 +361,45 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
         val objectsSnapshot = renderObjects
 
-        // ---- draw floor plane ----
-        floorVertexBuffer.position(0)
-        GLES20.glVertexAttribPointer(
-            positionHandle, 3, GLES20.GL_FLOAT, false, strideBytes, floorVertexBuffer
-        )
-        floorVertexBuffer.position(3)
-        GLES20.glVertexAttribPointer(
-            shadeHandle, 3, GLES20.GL_FLOAT, false, strideBytes, floorVertexBuffer
-        )
+        if (builtGridSpacing != gridSpacing) {
+            rebuildGridBuffer()
+        }
 
-        Matrix.setIdentityM(modelMatrix, 0)
-        Matrix.multiplyMM(mvpMatrix, 0, viewProjMatrix, 0, modelMatrix, 0)
-        GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0)
-        GLES20.glUniform3f(tintHandle, ambientBrightness, ambientBrightness, ambientBrightness)
+        if (floorVisible) {
 
-        floorIndexBuffer.position(0)
-        GLES20.glDrawElements(
-            GLES20.GL_TRIANGLES, floorIndexCount, GLES20.GL_UNSIGNED_SHORT, floorIndexBuffer
-        )
+            // ---- draw floor plane ----
+            floorVertexBuffer.position(0)
+            GLES20.glVertexAttribPointer(
+                positionHandle, 3, GLES20.GL_FLOAT, false, strideBytes, floorVertexBuffer
+            )
+            floorVertexBuffer.position(3)
+            GLES20.glVertexAttribPointer(
+                shadeHandle, 3, GLES20.GL_FLOAT, false, strideBytes, floorVertexBuffer
+            )
 
-        // ---- draw grid lines ----
-        gridVertexBuffer.position(0)
-        GLES20.glVertexAttribPointer(
-            positionHandle, 3, GLES20.GL_FLOAT, false, strideBytes, gridVertexBuffer
-        )
-        gridVertexBuffer.position(3)
-        GLES20.glVertexAttribPointer(
-            shadeHandle, 3, GLES20.GL_FLOAT, false, strideBytes, gridVertexBuffer
-        )
+            Matrix.setIdentityM(modelMatrix, 0)
+            Matrix.multiplyMM(mvpMatrix, 0, viewProjMatrix, 0, modelMatrix, 0)
+            GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0)
+            val floorBrightness = ambientBrightness + sceneLightContribution * 0.05f
+            GLES20.glUniform3f(tintHandle, floorBrightness, floorBrightness, floorBrightness)
 
-        GLES20.glDrawArrays(GLES20.GL_LINES, 0, gridVertexCount)
+            floorIndexBuffer.position(0)
+            GLES20.glDrawElements(
+                GLES20.GL_TRIANGLES, floorIndexCount, GLES20.GL_UNSIGNED_SHORT, floorIndexBuffer
+            )
+
+            // ---- draw grid lines ----
+            gridVertexBuffer.position(0)
+            GLES20.glVertexAttribPointer(
+                positionHandle, 3, GLES20.GL_FLOAT, false, strideBytes, gridVertexBuffer
+            )
+            gridVertexBuffer.position(3)
+            GLES20.glVertexAttribPointer(
+                shadeHandle, 3, GLES20.GL_FLOAT, false, strideBytes, gridVertexBuffer
+            )
+
+            GLES20.glDrawArrays(GLES20.GL_LINES, 0, gridVertexCount)
+        }
 
         // ---- draw scene objects ----
         for (obj in objectsSnapshot) {
@@ -392,7 +416,8 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
             GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0)
 
-            val boost = (if (obj.selected) 1.3f else 1f) * ambientBrightness
+            val boost = (if (obj.selected) 1.3f else 1f) *
+                (ambientBrightness + sceneLightContribution * 0.05f)
             GLES20.glUniform3f(
                 tintHandle,
                 (obj.colorR * boost).coerceAtMost(1f),
@@ -436,6 +461,9 @@ fun Viewport3DView(
     backgroundColor: Color = Color(0xFF182233),
     ambientBrightness: Float = 1f,
     resetCameraTrigger: Int = 0,
+    recenterPanTrigger: Int = 0,
+    gridSpacing: Float = 20f,
+    floorVisible: Boolean = true,
     modifier: Modifier = Modifier
 ) {
 
@@ -505,7 +533,7 @@ fun Viewport3DView(
 
                                     renderer.distance = (
                                         renderer.distance + zoomDelta
-                                    ).coerceIn(3f, 40f)
+                                    ).coerceIn(3f, 250f)
 
                                     val panScale = renderer.distance * 0.0025f
                                     val panDx = (newMidX - lastMidX) * panScale
@@ -555,11 +583,20 @@ fun Viewport3DView(
             renderer.clearB = backgroundColor.blue
 
             renderer.ambientBrightness = ambientBrightness
+            renderer.gridSpacing = gridSpacing
+            renderer.floorVisible = floorVisible
+
+            renderer.sceneLightContribution = objects
+                .filter { it.visible }
+                .flatMap { it.components.components }
+                .filter { it.type == ComponentType.LIGHT && it.enabled }
+                .sumOf { it.intensity.toDouble() }
+                .toFloat()
 
             if (renderer.lastAppliedResetTrigger != resetCameraTrigger) {
                 renderer.yawDeg = 45f
                 renderer.pitchDeg = 30f
-                renderer.distance = 17f
+                renderer.distance = 35f
                 renderer.lastAppliedResetTrigger = resetCameraTrigger
             }
 
