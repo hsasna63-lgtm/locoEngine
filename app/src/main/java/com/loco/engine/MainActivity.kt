@@ -141,6 +141,7 @@ data class GameObject(
     val scale: Float = 1f,
     val visible: Boolean = true,
     val locked: Boolean = false,
+    val pinned: Boolean = false,
 
     val components: ComponentSet =
         defaultComponentsForObject(type)
@@ -621,6 +622,12 @@ fun loadObjects(
                             false
                         ),
 
+                    pinned =
+                        item.optBoolean(
+                            "pinned",
+                            false
+                        ),
+
                     components =
                         components
                 )
@@ -697,6 +704,11 @@ fun saveObjects(
         item.put(
             "locked",
             obj.locked
+        )
+
+        item.put(
+            "pinned",
+            obj.pinned
         )
 
         item.put(
@@ -1627,14 +1639,27 @@ fun EditorScreen(
             mutableStateOf(false)
         }
 
-    var undoSnapshot by
+    val undoStack = remember {
+        mutableListOf<List<GameObject>>()
+    }
+
+    val redoStack = remember {
+        mutableListOf<List<GameObject>>()
+    }
+
+    var undoVersion by
         remember {
-            mutableStateOf<List<GameObject>?>(null)
+            mutableStateOf(0)
         }
 
-    var redoSnapshot by
+    var componentClipboard by
         remember {
-            mutableStateOf<List<GameObject>?>(null)
+            mutableStateOf<ComponentData?>(null)
+        }
+
+    var isolateMode by
+        remember {
+            mutableStateOf(false)
         }
 
     var multiSelectedIds by
@@ -1715,38 +1740,53 @@ fun EditorScreen(
 
     fun pushUndoSnapshot() {
 
-        undoSnapshot = objects.toList()
-        redoSnapshot = null
+        undoStack.add(objects.toList())
+
+        if (undoStack.size > 25) {
+            undoStack.removeAt(0)
+        }
+
+        redoStack.clear()
+
+        undoVersion++
     }
 
     fun performUndo() {
 
-        val snapshot =
-            undoSnapshot ?: return
+        if (undoStack.isEmpty()) {
+            return
+        }
 
-        redoSnapshot = objects.toList()
+        val snapshot =
+            undoStack.removeAt(undoStack.size - 1)
+
+        redoStack.add(objects.toList())
 
         objects.clear()
         objects.addAll(snapshot)
 
         saveCurrentObjects()
 
-        undoSnapshot = null
+        undoVersion++
     }
 
     fun performRedo() {
 
-        val snapshot =
-            redoSnapshot ?: return
+        if (redoStack.isEmpty()) {
+            return
+        }
 
-        undoSnapshot = objects.toList()
+        val snapshot =
+            redoStack.removeAt(redoStack.size - 1)
+
+        undoStack.add(objects.toList())
 
         objects.clear()
         objects.addAll(snapshot)
 
         saveCurrentObjects()
 
-        redoSnapshot = null
+        undoVersion++
     }
 
     fun updateObject(
@@ -1797,6 +1837,97 @@ fun EditorScreen(
                     !it.locked
             )
         }
+    }
+
+    fun togglePin(id: Int) {
+
+        updateObject(id) {
+            it.copy(pinned = !it.pinned)
+        }
+    }
+
+    fun broadcastComponentToMultiSelected(source: ComponentData) {
+
+        if (isPlaying) return
+        if (multiSelectedIds.size < 2) return
+
+        pushUndoSnapshot()
+
+        for (i in objects.indices) {
+
+            if (objects[i].id in multiSelectedIds) {
+
+                val obj = objects[i]
+
+                val newSet =
+                    ComponentSet(obj.components.components.toMutableList())
+
+                if (!newSet.has(source.type)) {
+                    newSet.add(source.type)
+                }
+
+                newSet.update(source.type) { source }
+
+                objects[i] = obj.copy(components = newSet)
+            }
+        }
+
+        saveCurrentObjects()
+    }
+
+    fun removeComponentFromMultiSelected(type: ComponentType) {
+
+        if (isPlaying) return
+        if (multiSelectedIds.isEmpty()) return
+
+        pushUndoSnapshot()
+
+        for (i in objects.indices) {
+
+            if (objects[i].id in multiSelectedIds) {
+
+                val obj = objects[i]
+
+                val newSet =
+                    ComponentSet(obj.components.components.toMutableList())
+
+                newSet.remove(type)
+
+                objects[i] = obj.copy(components = newSet)
+            }
+        }
+
+        saveCurrentObjects()
+    }
+
+    fun batchRenameNumbered() {
+
+        if (isPlaying) return
+        if (multiSelectedIds.size < 2) return
+
+        pushUndoSnapshot()
+
+        val targets =
+            objects.filter { it.id in multiSelectedIds }
+                .sortedBy { it.id }
+
+        val baseName =
+            targets.firstOrNull()
+                ?.name
+                ?.replace(Regex("\\s*\\d+$"), "")
+                ?: "Object"
+
+        var counter = 1
+
+        for (i in objects.indices) {
+
+            if (objects[i].id in multiSelectedIds) {
+                objects[i] = objects[i].copy(name = "$baseName $counter")
+                counter++
+            }
+        }
+
+        saveCurrentObjects()
     }
 
     fun renameObject(
@@ -1965,6 +2096,21 @@ fun EditorScreen(
         }
     }
 
+    fun quickRotate(angle: Float) {
+
+        if (isPlaying) {
+            return
+        }
+
+        val id =
+            selectedObjectId
+                ?: return
+
+        updateObject(id) {
+            it.copy(rotation = angle)
+        }
+    }
+
     fun scaleSelected(
         amount: Float
     ) {
@@ -2099,6 +2245,32 @@ fun EditorScreen(
         }
     }
 
+    fun pasteComponentToSelected() {
+
+        val clip = componentClipboard ?: return
+        val id = selectedObjectId ?: return
+
+        if (isPlaying) {
+            return
+        }
+
+        updateObject(id) { obj ->
+
+            val newSet =
+                ComponentSet(
+                    obj.components.components.toMutableList()
+                )
+
+            if (!newSet.has(clip.type)) {
+                newSet.add(clip.type)
+            }
+
+            newSet.update(clip.type) { clip }
+
+            obj.copy(components = newSet)
+        }
+    }
+
 
     /* =====================================================
        EDITOR LAYOUT
@@ -2149,14 +2321,14 @@ fun EditorScreen(
                 },
 
                 canUndo =
-                    undoSnapshot != null,
+                    undoVersion >= 0 && undoStack.isNotEmpty(),
 
                 onUndo = {
                     performUndo()
                 },
 
                 canRedo =
-                    redoSnapshot != null,
+                    undoVersion >= 0 && redoStack.isNotEmpty(),
 
                 onRedo = {
                     performRedo()
@@ -2221,6 +2393,17 @@ fun EditorScreen(
 
                 onRotationStepChange = {
                     rotationStep = it
+                },
+
+                onQuickRotate = {
+                    quickRotate(it)
+                },
+
+                isolateMode =
+                    isolateMode,
+
+                onToggleIsolate = {
+                    isolateMode = !isolateMode
                 }
             )
 
@@ -2281,6 +2464,10 @@ fun EditorScreen(
 
                     onToggleLock = {
                         toggleLock(it)
+                    },
+
+                    onTogglePin = {
+                        togglePin(it)
                     },
 
                     multiSelectedIds =
@@ -2379,6 +2566,10 @@ fun EditorScreen(
 
                             saveCurrentObjects()
                         }
+                    },
+
+                    onBatchRenameNumbered = {
+                        batchRenameNumbered()
                     }
                 )
 
@@ -2440,6 +2631,9 @@ fun EditorScreen(
 
                     floorVisible =
                         floorVisible,
+
+                    isolateMode =
+                        isolateMode,
 
                     modifier =
                         Modifier.weight(
@@ -2637,6 +2831,28 @@ fun EditorScreen(
 
                     onResetAllComponents = { id ->
                         resetAllComponents(id)
+                    },
+
+                    componentClipboard =
+                        componentClipboard,
+
+                    onCopyComponent = {
+                        componentClipboard = it
+                    },
+
+                    onPasteComponent = {
+                        pasteComponentToSelected()
+                    },
+
+                    multiSelectedCount =
+                        multiSelectedIds.size,
+
+                    onBroadcastComponent = {
+                        broadcastComponentToMultiSelected(it)
+                    },
+
+                    onBatchRemoveComponent = {
+                        removeComponentFromMultiSelected(it)
                     },
 
                     ambientBrightness =
@@ -2986,7 +3202,10 @@ fun EditorToolBar(
     snapGridSize: Float,
     onSnapGridSizeChange: (Float) -> Unit,
     rotationStep: Float,
-    onRotationStepChange: (Float) -> Unit
+    onRotationStepChange: (Float) -> Unit,
+    onQuickRotate: (Float) -> Unit,
+    isolateMode: Boolean,
+    onToggleIsolate: () -> Unit
 ) {
 
     Column(
@@ -3085,7 +3304,8 @@ fun EditorToolBar(
 
         Row(
             horizontalArrangement =
-                Arrangement.spacedBy(4.dp)
+                Arrangement.spacedBy(4.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState())
         ) {
 
             Button(
@@ -3218,6 +3438,36 @@ fun EditorToolBar(
                 ),
                 modifier = Modifier.width(80.dp)
             )
+
+            listOf(0f, 45f, 90f, 180f).forEach { angle ->
+
+                OutlinedButton(
+                    onClick = { onQuickRotate(angle) }
+                ) {
+                    Text("${angle.roundToInt()}°")
+                }
+            }
+
+            if (isolateMode) {
+
+                Button(
+                    onClick = onToggleIsolate
+                ) {
+                    Text(
+                        text = text(language, "🔍 ISOLATED", "🔍 معزول")
+                    )
+                }
+
+            } else {
+
+                OutlinedButton(
+                    onClick = onToggleIsolate
+                ) {
+                    Text(
+                        text = text(language, "🔍 Isolate", "🔍 عزل")
+                    )
+                }
+            }
         }
     }
 }
@@ -3238,12 +3488,14 @@ fun SceneTree(
     onSearchChange: (String) -> Unit,
     onToggleVisible: (Int) -> Unit,
     onToggleLock: (Int) -> Unit,
+    onTogglePin: (Int) -> Unit,
     multiSelectedIds: Set<Int>,
     onToggleMultiSelect: (Int) -> Unit,
     onSelectAll: (Set<Int>) -> Unit,
     onDeleteMultiSelected: () -> Unit,
     onToggleVisibleMultiSelected: () -> Unit,
     onDuplicateMultiSelected: () -> Unit,
+    onBatchRenameNumbered: () -> Unit,
     compact: Boolean = false
 ) {
 
@@ -3416,11 +3668,12 @@ fun SceneTree(
                     )
             }.let { list ->
 
-                if (sortAscending) {
+                val sorted = if (sortAscending) {
                     list.sortedBy { it.name }
                 } else {
                     list.sortedByDescending { it.name }
                 }
+                sorted.sortedByDescending { it.pinned }
             }
 
         Row(
@@ -3489,6 +3742,15 @@ fun SceneTree(
                     color = Color.Gray,
                     modifier = Modifier
                         .clickable { onDuplicateMultiSelected() }
+                        .padding(2.dp)
+                )
+
+                Text(
+                    text = "🔢",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    modifier = Modifier
+                        .clickable { onBatchRenameNumbered() }
                         .padding(2.dp)
                 )
             }
@@ -3637,6 +3899,15 @@ fun SceneTree(
                                 .padding(
                                     horizontal = 2.dp
                                 )
+                    )
+
+                    Text(
+                        text = if (obj.pinned) "📌" else "📍",
+                        fontSize = 12.sp,
+                        color = if (obj.pinned) Color(0xFFFACC15) else Color.Gray,
+                        modifier = Modifier
+                            .clickable { onTogglePin(obj.id) }
+                            .padding(horizontal = 2.dp)
                     )
                 }
             }
@@ -3837,6 +4108,7 @@ fun EditorViewport(
     recenterPanTrigger: Int = 0,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
+    isolateMode: Boolean = false,
     compact: Boolean = false
 ) {
 
@@ -3882,6 +4154,9 @@ fun EditorViewport(
 
                 floorVisible =
                     floorVisible,
+
+                isolateMode =
+                    isolateMode,
 
                 modifier =
                     Modifier.fillMaxSize()
@@ -3959,6 +4234,13 @@ fun EditorViewport(
 
             if (
                 !obj.visible
+            ) {
+                return@forEach
+            }
+
+            if (
+                isolateMode &&
+                obj.id != selectedObjectId
             ) {
                 return@forEach
             }
@@ -4130,6 +4412,12 @@ fun InspectorPanel(
     onUpdateComponent: (Int, ComponentType, (ComponentData) -> ComponentData) -> Unit,
     onRemoveComponent: (Int, ComponentType) -> Unit,
     onResetAllComponents: (Int) -> Unit,
+    componentClipboard: ComponentData?,
+    onCopyComponent: (ComponentData) -> Unit,
+    onPasteComponent: () -> Unit,
+    multiSelectedCount: Int,
+    onBroadcastComponent: (ComponentData) -> Unit,
+    onBatchRemoveComponent: (ComponentType) -> Unit,
     ambientBrightness: Float,
     onAmbientBrightnessChange: (Float) -> Unit,
     onResetCamera: () -> Unit,
@@ -4507,6 +4795,18 @@ fun InspectorPanel(
                         .clickable { onResetAllComponents(selectedObject.id) }
                         .padding(horizontal = 4.dp)
                 )
+
+                if (componentClipboard != null) {
+
+                    Text(
+                        text = text(language, "Paste", "لصق"),
+                        color = Color(0xFF22C55E),
+                        fontSize = 10.sp,
+                        modifier = Modifier
+                            .clickable { onPasteComponent() }
+                            .padding(horizontal = 4.dp)
+                    )
+                }
             }
 
             if (selectedObject.components.components.isEmpty()) {
@@ -4539,7 +4839,11 @@ fun InspectorPanel(
                         }
                     },
                     onUpdate = onUpdateComponent,
-                    onRemove = onRemoveComponent
+                    onRemove = onRemoveComponent,
+                    onCopy = onCopyComponent,
+                    multiSelectedCount = multiSelectedCount,
+                    onBroadcast = onBroadcastComponent,
+                    onBatchRemove = onBatchRemoveComponent
                 )
 
                 if (index < selectedObject.components.components.size - 1) {
@@ -4807,7 +5111,11 @@ fun ComponentCard(
     expanded: Boolean,
     onToggleExpand: () -> Unit,
     onUpdate: (Int, ComponentType, (ComponentData) -> ComponentData) -> Unit,
-    onRemove: (Int, ComponentType) -> Unit
+    onRemove: (Int, ComponentType) -> Unit,
+    onCopy: (ComponentData) -> Unit,
+    multiSelectedCount: Int,
+    onBroadcast: (ComponentData) -> Unit,
+    onBatchRemove: (ComponentType) -> Unit
 ) {
 
     Row(
@@ -4858,6 +5166,41 @@ fun ComponentCard(
                         }
                     }
                 )
+
+            Text(
+                text = "⎘",
+                color = Color(0xFF60A5FA),
+                modifier = Modifier
+                    .clickable {
+                        onCopy(component)
+                    }
+                    .padding(horizontal = 4.dp)
+            )
+
+            if (multiSelectedCount > 1) {
+
+                Text(
+                    text = "⇶$multiSelectedCount",
+                    color = Color(0xFF22C55E),
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .clickable {
+                            onBroadcast(component)
+                        }
+                        .padding(horizontal = 4.dp)
+                )
+
+                Text(
+                    text = "✕⇶",
+                    color = Color(0xFFEF4444),
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .clickable {
+                            onBatchRemove(component.type)
+                        }
+                        .padding(horizontal = 4.dp)
+                )
+            }
 
             Text(
                 text = "✕",
