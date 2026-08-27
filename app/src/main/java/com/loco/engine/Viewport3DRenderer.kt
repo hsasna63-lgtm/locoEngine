@@ -150,6 +150,9 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
     var floorVisible = true
 
     @Volatile
+    var unrealSettings = UnrealProjectSettings()
+
+    @Volatile
     var targetX = 0f
 
     @Volatile
@@ -279,17 +282,30 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
             "attribute vec4 aPosition;",
             "attribute vec3 aShade;",
             "varying vec3 vColor;",
+            "varying float vDepth;",
             "void main() {",
             "gl_Position = uMVPMatrix * aPosition;",
             "vColor = aShade * uTintColor;",
+            "vDepth = abs(gl_Position.z / max(gl_Position.w, 0.0001));",
             "}"
         ).joinToString("\n")
 
         val fragmentSrc = listOf(
             "precision mediump float;",
             "varying vec3 vColor;",
+            "varying float vDepth;",
+            "uniform float uFogDensity;",
+            "uniform vec3 uFogColor;",
+            "uniform float uBloomStrength;",
+            "uniform float uColorGrade;",
+            "uniform float uAtmosphere;",
             "void main() {",
-            "gl_FragColor = vec4(vColor, 1.0);",
+            "vec3 c = vColor;",
+            "c = mix(vec3(0.5), c, clamp(uColorGrade, 0.0, 2.0));",
+            "c += max(c - vec3(0.72), vec3(0.0)) * uBloomStrength;",
+            "float fog = 1.0 - exp(-uFogDensity * vDepth * vDepth * 0.35);",
+            "c = mix(c, uFogColor, clamp(fog * uAtmosphere, 0.0, 0.9));",
+            "gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);",
             "}"
         ).joinToString("\n")
 
@@ -346,6 +362,19 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
         val shadeHandle = GLES20.glGetAttribLocation(program, "aShade")
         val mvpHandle = GLES20.glGetUniformLocation(program, "uMVPMatrix")
         val tintHandle = GLES20.glGetUniformLocation(program, "uTintColor")
+        val fogDensityHandle = GLES20.glGetUniformLocation(program, "uFogDensity")
+        val fogColorHandle = GLES20.glGetUniformLocation(program, "uFogColor")
+        val bloomHandle = GLES20.glGetUniformLocation(program, "uBloomStrength")
+        val gradeHandle = GLES20.glGetUniformLocation(program, "uColorGrade")
+        val atmosphereHandle = GLES20.glGetUniformLocation(program, "uAtmosphere")
+
+        val fogEnabled = unrealSettings.isEnabled(UnrealFeatureType.HEIGHT_FOG)
+        val atmosphereEnabled = unrealSettings.isEnabled(UnrealFeatureType.SKY_ATMOSPHERE) || unrealSettings.isEnabled(UnrealFeatureType.VOLUMETRIC_CLOUDS)
+        GLES20.glUniform1f(fogDensityHandle, if (fogEnabled) unrealSettings.fogDensity else 0f)
+        GLES20.glUniform3f(fogColorHandle, clearR, clearG, clearB)
+        GLES20.glUniform1f(bloomHandle, if (unrealSettings.isEnabled(UnrealFeatureType.BLOOM) || unrealSettings.isEnabled(UnrealFeatureType.POST_PROCESS)) unrealSettings.bloomStrength else 0f)
+        GLES20.glUniform1f(gradeHandle, if (unrealSettings.isEnabled(UnrealFeatureType.COLOR_GRADING)) unrealSettings.colorGrading else 1f)
+        GLES20.glUniform1f(atmosphereHandle, if (atmosphereEnabled) 1f else 0f)
 
         vertexBuffer.position(0)
         GLES20.glEnableVertexAttribArray(positionHandle)
@@ -416,8 +445,11 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
             GLES20.glUniformMatrix4fv(mvpHandle, 1, false, mvpMatrix, 0)
 
+            val giBoost = if (unrealSettings.isEnabled(UnrealFeatureType.LUMEN_LIKE_GI)) 0.08f else 0f
+            val shadowPenalty = if (unrealSettings.isEnabled(UnrealFeatureType.VIRTUAL_SHADOWS)) 0.96f else 1f
+            val naniteBoost = if (unrealSettings.isEnabled(UnrealFeatureType.NANITE_LIKE_GEOMETRY)) 1.02f else 1f
             val boost = (if (obj.selected) 1.3f else 1f) *
-                (ambientBrightness + sceneLightContribution * 0.05f)
+                (ambientBrightness + sceneLightContribution * 0.05f + giBoost) * shadowPenalty * naniteBoost
             GLES20.glUniform3f(
                 tintHandle,
                 (obj.colorR * boost).coerceAtMost(1f),
@@ -465,6 +497,7 @@ fun Viewport3DView(
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
     isolateMode: Boolean = false,
+    unrealSettings: UnrealProjectSettings = UnrealProjectSettings(),
     modifier: Modifier = Modifier
 ) {
 
@@ -586,6 +619,7 @@ fun Viewport3DView(
             renderer.ambientBrightness = ambientBrightness
             renderer.gridSpacing = gridSpacing
             renderer.floorVisible = floorVisible
+            renderer.unrealSettings = unrealSettings
 
             renderer.sceneLightContribution = objects
                 .filter { it.visible }
