@@ -446,22 +446,6 @@ fun worldBackgroundStorageKey(
 }
 
 
-fun unrealSettingsStorageKey(project: Project): String =
-    "unreal_features_${project.name}_${project.type}".replace(" ", "_")
-
-fun loadUnrealProjectSettings(context: Context, project: Project): UnrealProjectSettings {
-    val raw = context.getSharedPreferences("loco_engine", Context.MODE_PRIVATE)
-        .getString(unrealSettingsStorageKey(project), null)
-    return try {
-        unrealSettingsFromJson(if (raw == null) null else JSONObject(raw))
-    } catch (_: Exception) { UnrealProjectSettings() }
-}
-
-fun saveUnrealProjectSettings(context: Context, project: Project, settings: UnrealProjectSettings) {
-    context.getSharedPreferences("loco_engine", Context.MODE_PRIVATE).edit()
-        .putString(unrealSettingsStorageKey(project), unrealSettingsToJson(settings).toString()).apply()
-}
-
 fun saveWorldBackgroundColor(
     context: Context,
     project: Project,
@@ -507,6 +491,63 @@ fun loadWorldBackgroundColor(
             )
 
     return Color(stored)
+}
+
+
+data class WorldSettings(
+    val gridSpacing: Float,
+    val floorVisible: Boolean,
+    val ambientBrightness: Float
+)
+
+
+fun worldSettingsStorageKey(
+    project: Project
+): String {
+
+    return "world_settings_${project.name}_${project.type}"
+        .replace(" ", "_")
+}
+
+
+fun saveWorldSettings(
+    context: Context,
+    project: Project,
+    settings: WorldSettings
+) {
+
+    val key = worldSettingsStorageKey(project)
+
+    context
+        .getSharedPreferences(
+            "loco_engine",
+            Context.MODE_PRIVATE
+        )
+        .edit()
+        .putFloat("${key}_grid", settings.gridSpacing)
+        .putBoolean("${key}_floor", settings.floorVisible)
+        .putFloat("${key}_brightness", settings.ambientBrightness)
+        .apply()
+}
+
+
+fun loadWorldSettings(
+    context: Context,
+    project: Project
+): WorldSettings {
+
+    val key = worldSettingsStorageKey(project)
+
+    val prefs = context.getSharedPreferences(
+        "loco_engine",
+        Context.MODE_PRIVATE
+    )
+
+    return WorldSettings(
+        gridSpacing = prefs.getFloat("${key}_grid", 20f),
+        floorVisible = prefs.getBoolean("${key}_floor", true),
+        ambientBrightness = prefs.getFloat("${key}_brightness", 1f)
+    )
 }
 
 
@@ -1673,9 +1714,19 @@ fun EditorScreen(
             mutableStateOf<ComponentData?>(null)
         }
 
+    var objectComponentsClipboard by
+        remember {
+            mutableStateOf<List<ComponentData>?>(null)
+        }
+
     var isolateMode by
         remember {
             mutableStateOf(false)
+        }
+
+    var axisConstraint by
+        remember {
+            mutableStateOf("Free")
         }
 
     var multiSelectedIds by
@@ -1688,30 +1739,31 @@ fun EditorScreen(
             mutableStateOf(20f)
         }
 
+    val initialWorldSettings = remember(project.name) {
+        loadWorldSettings(context, project)
+    }
+
     var ambientBrightness by
         remember {
-            mutableStateOf(1f)
+            mutableStateOf(initialWorldSettings.ambientBrightness)
         }
 
     var gridSpacing by
         remember {
-            mutableStateOf(20f)
+            mutableStateOf(initialWorldSettings.gridSpacing)
         }
 
     var floorVisible by
         remember {
-            mutableStateOf(true)
+            mutableStateOf(initialWorldSettings.floorVisible)
         }
 
-    var unrealSettings by remember(project.name) {
-        mutableStateOf(loadUnrealProjectSettings(context, project))
-    }
-
-    var showUnrealFeatures by remember { mutableStateOf(false) }
-
-    fun updateUnrealSettings(update: (UnrealProjectSettings) -> UnrealProjectSettings) {
-        unrealSettings = update(unrealSettings)
-        saveUnrealProjectSettings(context, project, unrealSettings)
+    fun persistWorldSettings() {
+        saveWorldSettings(
+            context,
+            project,
+            WorldSettings(gridSpacing, floorVisible, ambientBrightness)
+        )
     }
 
     var resetCameraTrigger by
@@ -1720,6 +1772,11 @@ fun EditorScreen(
         }
 
     var recenterPanTrigger by
+        remember {
+            mutableStateOf(0)
+        }
+
+    var frameAllTrigger by
         remember {
             mutableStateOf(0)
         }
@@ -1957,6 +2014,42 @@ fun EditorScreen(
         saveCurrentObjects()
     }
 
+    fun lockAllObjects() {
+
+        for (i in objects.indices) {
+            objects[i] = objects[i].copy(locked = true)
+        }
+
+        saveCurrentObjects()
+    }
+
+    fun unlockAllObjects() {
+
+        for (i in objects.indices) {
+            objects[i] = objects[i].copy(locked = false)
+        }
+
+        saveCurrentObjects()
+    }
+
+    fun showAllObjects() {
+
+        for (i in objects.indices) {
+            objects[i] = objects[i].copy(visible = true)
+        }
+
+        saveCurrentObjects()
+    }
+
+    fun hideAllObjects() {
+
+        for (i in objects.indices) {
+            objects[i] = objects[i].copy(visible = false)
+        }
+
+        saveCurrentObjects()
+    }
+
     fun renameObject(
         id: Int,
         newName: String
@@ -2034,13 +2127,19 @@ fun EditorScreen(
             return
         }
 
+        val constrainedDx =
+            if (axisConstraint == "Y") 0f else dx
+
+        val constrainedDy =
+            if (axisConstraint == "X") 0f else dy
+
         updateObject(id) {
 
             val newX =
-                it.x + dx
+                it.x + constrainedDx
 
             val newY =
-                it.y + dy
+                it.y + constrainedDy
 
             val finalX =
                 if (snapEnabled) {
@@ -2298,6 +2397,23 @@ fun EditorScreen(
         }
     }
 
+    fun pasteAllComponentsToSelected() {
+
+        val clip = objectComponentsClipboard ?: return
+        val id = selectedObjectId ?: return
+
+        if (isPlaying) {
+            return
+        }
+
+        updateObject(id) { obj ->
+
+            val newSet = ComponentSet(clip.toMutableList())
+
+            obj.copy(components = newSet)
+        }
+    }
+
 
     /* =====================================================
        EDITOR LAYOUT
@@ -2363,8 +2479,6 @@ fun EditorScreen(
 
                 showSavedIndicator =
                     showSavedIndicator,
-
-                onShowUnrealFeatures = { showUnrealFeatures = true },
 
                 onBack =
                     onBack
@@ -2433,6 +2547,17 @@ fun EditorScreen(
 
                 onToggleIsolate = {
                     isolateMode = !isolateMode
+                },
+
+                axisConstraint =
+                    axisConstraint,
+
+                onCycleAxisConstraint = {
+                    axisConstraint = when (axisConstraint) {
+                        "Free" -> "X"
+                        "X" -> "Y"
+                        else -> "Free"
+                    }
                 }
             )
 
@@ -2599,6 +2724,22 @@ fun EditorScreen(
 
                     onBatchRenameNumbered = {
                         batchRenameNumbered()
+                    },
+
+                    onLockAll = {
+                        lockAllObjects()
+                    },
+
+                    onUnlockAll = {
+                        unlockAllObjects()
+                    },
+
+                    onShowAll = {
+                        showAllObjects()
+                    },
+
+                    onHideAll = {
+                        hideAllObjects()
                     }
                 )
 
@@ -2655,6 +2796,9 @@ fun EditorScreen(
                     recenterPanTrigger =
                         recenterPanTrigger,
 
+                    frameAllTrigger =
+                        frameAllTrigger,
+
                     gridSpacing =
                         gridSpacing,
 
@@ -2663,8 +2807,6 @@ fun EditorScreen(
 
                     isolateMode =
                         isolateMode,
-
-                    unrealSettings = unrealSettings,
 
                     modifier =
                         Modifier.weight(
@@ -2723,6 +2865,10 @@ fun EditorScreen(
                                 id
                             )
                         }
+                    },
+
+                    onNudge = { id, dx, dy ->
+                        moveSelected(id, dx, dy)
                     },
 
                     worldBackgroundColor =
@@ -2875,6 +3021,17 @@ fun EditorScreen(
                         pasteComponentToSelected()
                     },
 
+                    objectComponentsClipboard =
+                        objectComponentsClipboard,
+
+                    onCopyAllComponents = {
+                        objectComponentsClipboard = it
+                    },
+
+                    onPasteAllComponents = {
+                        pasteAllComponentsToSelected()
+                    },
+
                     multiSelectedCount =
                         multiSelectedIds.size,
 
@@ -2891,6 +3048,7 @@ fun EditorScreen(
 
                     onAmbientBrightnessChange = {
                         ambientBrightness = it
+                        persistWorldSettings()
                     },
 
                     onResetCamera = {
@@ -2903,16 +3061,23 @@ fun EditorScreen(
                             recenterPanTrigger + 1
                     },
 
+                    onFrameAll = {
+                        frameAllTrigger =
+                            frameAllTrigger + 1
+                    },
+
                     gridSpacing = gridSpacing,
 
                     onGridSpacingChange = {
                         gridSpacing = it
+                        persistWorldSettings()
                     },
 
                     floorVisible = floorVisible,
 
                     onToggleFloorVisible = {
                         floorVisible = !floorVisible
+                        persistWorldSettings()
                     }
                 )
             }
@@ -3012,57 +3177,9 @@ fun EditorScreen(
                 }
             )
         }
-
-        if (showUnrealFeatures) {
-            UnrealFeaturesDialog(
-                language = language,
-                settings = unrealSettings,
-                onToggle = { feature -> updateUnrealSettings { it.toggle(feature) } },
-                onReset = {
-                    unrealSettings = UnrealProjectSettings()
-                    saveUnrealProjectSettings(context, project, unrealSettings)
-                },
-                onClose = { showUnrealFeatures = false }
-            )
-        }
     }
 }
 
-
-/* =========================================================
-   UNREAL-INSPIRED 50 FEATURES PANEL
-   ========================================================= */
-
-@Composable
-fun UnrealFeaturesDialog(
-    language: String,
-    settings: UnrealProjectSettings,
-    onToggle: (UnrealFeatureType) -> Unit,
-    onReset: () -> Unit,
-    onClose: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(text(language, "UNREAL INSPIRED - 50 FEATURES", "50 ميزة مستوحاة من Unreal"), color = Color(0xFF60A5FA)) },
-        text = {
-            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
-                UnrealFeatureType.values().groupBy { it.category }.forEach { (category, features) ->
-                    Text(category, color = Color(0xFF00E5FF), fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp, bottom = 3.dp))
-                    features.forEach { feature ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(unrealFeatureDisplayName(feature, language), color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
-                            Switch(checked = settings.isEnabled(feature), onCheckedChange = { onToggle(feature) })
-                        }
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(text(language, "These are Android/OpenGL-friendly Loco Engine systems inspired by Unreal concepts.", "هذه أنظمة مناسبة لـ Android/OpenGL في Loco Engine ومستوحاة من مفاهيم Unreal."), color = Color.Gray, fontSize = 10.sp)
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text(text(language, "DONE", "تم")) } },
-        dismissButton = { TextButton(onClick = onReset) { Text(text(language, "RESET 50", "إعادة ضبط الـ50")) } }
-    )
-}
 
 /* =========================================================
    TOP BAR
@@ -3081,7 +3198,6 @@ fun EditorTopBar(
     canRedo: Boolean,
     onRedo: () -> Unit,
     showSavedIndicator: Boolean,
-    onShowUnrealFeatures: () -> Unit = {},
     onBack: () -> Unit
 ) {
 
@@ -3226,14 +3342,6 @@ fun EditorTopBar(
                     Color(0xFF00E5FF)
             )
 
-            TextButton(onClick = onShowUnrealFeatures) {
-                Text(
-                    text = "UE 50",
-                    color = Color(0xFF60A5FA),
-                    fontSize = 11.sp
-                )
-            }
-
             TextButton(
                 onClick = {
 
@@ -3293,7 +3401,9 @@ fun EditorToolBar(
     onRotationStepChange: (Float) -> Unit,
     onQuickRotate: (Float) -> Unit,
     isolateMode: Boolean,
-    onToggleIsolate: () -> Unit
+    onToggleIsolate: () -> Unit,
+    axisConstraint: String,
+    onCycleAxisConstraint: () -> Unit
 ) {
 
     Column(
@@ -3556,6 +3666,18 @@ fun EditorToolBar(
                     )
                 }
             }
+
+            OutlinedButton(
+                onClick = onCycleAxisConstraint
+            ) {
+                Text(
+                    text = "⇄ " + when (axisConstraint) {
+                        "X" -> "X"
+                        "Y" -> "Y"
+                        else -> text(language, "Free", "حر")
+                    }
+                )
+            }
         }
     }
 }
@@ -3584,6 +3706,10 @@ fun SceneTree(
     onToggleVisibleMultiSelected: () -> Unit,
     onDuplicateMultiSelected: () -> Unit,
     onBatchRenameNumbered: () -> Unit,
+    onLockAll: () -> Unit,
+    onUnlockAll: () -> Unit,
+    onShowAll: () -> Unit,
+    onHideAll: () -> Unit,
     compact: Boolean = false
 ) {
 
@@ -3797,6 +3923,42 @@ fun SceneTree(
                         val allIds = filteredObjects.map { it.id }.toSet()
                         onSelectAll(allIds - multiSelectedIds)
                     }
+                    .padding(2.dp)
+            )
+
+            Text(
+                text = text(language, "🔒All", "🔒الكل"),
+                fontSize = 10.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .clickable { onLockAll() }
+                    .padding(2.dp)
+            )
+
+            Text(
+                text = text(language, "🔓All", "🔓الكل"),
+                fontSize = 10.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .clickable { onUnlockAll() }
+                    .padding(2.dp)
+            )
+
+            Text(
+                text = text(language, "👁All", "👁الكل"),
+                fontSize = 10.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .clickable { onShowAll() }
+                    .padding(2.dp)
+            )
+
+            Text(
+                text = text(language, "🚫All", "🚫الكل"),
+                fontSize = 10.sp,
+                color = Color.Gray,
+                modifier = Modifier
+                    .clickable { onHideAll() }
                     .padding(2.dp)
             )
 
@@ -4194,10 +4356,10 @@ fun EditorViewport(
     ambientBrightness: Float = 1f,
     resetCameraTrigger: Int = 0,
     recenterPanTrigger: Int = 0,
+    frameAllTrigger: Int = 0,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
     isolateMode: Boolean = false,
-    unrealSettings: UnrealProjectSettings = UnrealProjectSettings(),
     compact: Boolean = false
 ) {
 
@@ -4238,6 +4400,9 @@ fun EditorViewport(
                 recenterPanTrigger =
                     recenterPanTrigger,
 
+                frameAllTrigger =
+                    frameAllTrigger,
+
                 gridSpacing =
                     gridSpacing,
 
@@ -4246,8 +4411,6 @@ fun EditorViewport(
 
                 isolateMode =
                     isolateMode,
-
-                unrealSettings = unrealSettings,
 
                 modifier =
                     Modifier.fillMaxSize()
@@ -4497,6 +4660,7 @@ fun InspectorPanel(
     onDuplicateInPlace: (Int) -> Unit,
     onRename: (Int, String) -> Unit,
     onResetTransform: (Int) -> Unit,
+    onNudge: (Int, Float, Float) -> Unit,
     worldBackgroundColor: Color,
     onWorldBackgroundColorChange: (Color) -> Unit,
     onAddComponent: (Int, ComponentType) -> Unit,
@@ -4506,6 +4670,9 @@ fun InspectorPanel(
     componentClipboard: ComponentData?,
     onCopyComponent: (ComponentData) -> Unit,
     onPasteComponent: () -> Unit,
+    objectComponentsClipboard: List<ComponentData>?,
+    onCopyAllComponents: (List<ComponentData>) -> Unit,
+    onPasteAllComponents: () -> Unit,
     multiSelectedCount: Int,
     onBroadcastComponent: (ComponentData) -> Unit,
     onBatchRemoveComponent: (ComponentType) -> Unit,
@@ -4513,6 +4680,7 @@ fun InspectorPanel(
     onAmbientBrightnessChange: (Float) -> Unit,
     onResetCamera: () -> Unit,
     onRecenterPan: () -> Unit,
+    onFrameAll: () -> Unit,
     gridSpacing: Float,
     onGridSpacingChange: (Float) -> Unit,
     floorVisible: Boolean,
@@ -4551,6 +4719,16 @@ fun InspectorPanel(
                 "${objects.size} objects · ${objects.count { it.visible }} visible",
                 "${objects.size} عنصر · ${objects.count { it.visible }} ظاهر"
             ),
+            color = Color.Gray,
+            fontSize = 10.sp
+        )
+
+        Text(
+            text = ComponentType.values().joinToString(" · ") { type ->
+                val count = objects.flatMap { it.components.components }
+                    .count { it.type == type }
+                "${componentIcon(type)}$count"
+            },
             color = Color.Gray,
             fontSize = 10.sp
         )
@@ -4691,6 +4869,16 @@ fun InspectorPanel(
             )
         }
 
+        OutlinedButton(
+            onClick = onFrameAll,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Text(
+                text = text(language, "🗺 Frame All", "🗺 تأطير الكل")
+            )
+        }
+
         Spacer(modifier = Modifier.height(6.dp))
 
         Row(
@@ -4784,6 +4972,36 @@ fun InspectorPanel(
                 text = "X: ${selectedObject.x.roundToInt()}  Y: ${selectedObject.y.roundToInt()}",
                 color = Color.White
             )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+
+                Text(
+                    text = "◀",
+                    modifier = Modifier
+                        .clickable { onNudge(selectedObject.id, -10f, 0f) }
+                        .padding(6.dp)
+                )
+                Text(
+                    text = "▶",
+                    modifier = Modifier
+                        .clickable { onNudge(selectedObject.id, 10f, 0f) }
+                        .padding(6.dp)
+                )
+                Text(
+                    text = "▲",
+                    modifier = Modifier
+                        .clickable { onNudge(selectedObject.id, 0f, -10f) }
+                        .padding(6.dp)
+                )
+                Text(
+                    text = "▼",
+                    modifier = Modifier
+                        .clickable { onNudge(selectedObject.id, 0f, 10f) }
+                        .padding(6.dp)
+                )
+            }
 
             Text(
                 text = text(
@@ -4895,6 +5113,33 @@ fun InspectorPanel(
                         fontSize = 10.sp,
                         modifier = Modifier
                             .clickable { onPasteComponent() }
+                            .padding(horizontal = 4.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Text(
+                    text = text(language, "📋 Copy All", "📋 نسخ الكل"),
+                    color = Color(0xFF60A5FA),
+                    fontSize = 10.sp,
+                    modifier = Modifier
+                        .clickable { onCopyAllComponents(selectedObject.components.components) }
+                        .padding(horizontal = 4.dp)
+                )
+
+                if (objectComponentsClipboard != null) {
+
+                    Text(
+                        text = text(language, "📋 Paste All", "📋 لصق الكل"),
+                        color = Color(0xFF22C55E),
+                        fontSize = 10.sp,
+                        modifier = Modifier
+                            .clickable { onPasteAllComponents() }
                             .padding(horizontal = 4.dp)
                     )
                 }
