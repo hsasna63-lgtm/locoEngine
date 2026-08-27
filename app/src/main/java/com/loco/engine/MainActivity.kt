@@ -446,6 +446,22 @@ fun worldBackgroundStorageKey(
 }
 
 
+fun unrealSettingsStorageKey(project: Project): String =
+    "unreal_features_${project.name}_${project.type}".replace(" ", "_")
+
+fun loadUnrealProjectSettings(context: Context, project: Project): UnrealProjectSettings {
+    val raw = context.getSharedPreferences("loco_engine", Context.MODE_PRIVATE)
+        .getString(unrealSettingsStorageKey(project), null)
+    return try {
+        unrealSettingsFromJson(if (raw == null) null else JSONObject(raw))
+    } catch (_: Exception) { UnrealProjectSettings() }
+}
+
+fun saveUnrealProjectSettings(context: Context, project: Project, settings: UnrealProjectSettings) {
+    context.getSharedPreferences("loco_engine", Context.MODE_PRIVATE).edit()
+        .putString(unrealSettingsStorageKey(project), unrealSettingsToJson(settings).toString()).apply()
+}
+
 fun saveWorldBackgroundColor(
     context: Context,
     project: Project,
@@ -1687,6 +1703,17 @@ fun EditorScreen(
             mutableStateOf(true)
         }
 
+    var unrealSettings by remember(project.name) {
+        mutableStateOf(loadUnrealProjectSettings(context, project))
+    }
+
+    var showUnrealFeatures by remember { mutableStateOf(false) }
+
+    fun updateUnrealSettings(update: (UnrealProjectSettings) -> UnrealProjectSettings) {
+        unrealSettings = update(unrealSettings)
+        saveUnrealProjectSettings(context, project, unrealSettings)
+    }
+
     var resetCameraTrigger by
         remember {
             mutableStateOf(0)
@@ -2337,6 +2364,8 @@ fun EditorScreen(
                 showSavedIndicator =
                     showSavedIndicator,
 
+                onShowUnrealFeatures = { showUnrealFeatures = true },
+
                 onBack =
                     onBack
             )
@@ -2634,6 +2663,8 @@ fun EditorScreen(
 
                     isolateMode =
                         isolateMode,
+
+                    unrealSettings = unrealSettings,
 
                     modifier =
                         Modifier.weight(
@@ -2981,9 +3012,57 @@ fun EditorScreen(
                 }
             )
         }
+
+        if (showUnrealFeatures) {
+            UnrealFeaturesDialog(
+                language = language,
+                settings = unrealSettings,
+                onToggle = { feature -> updateUnrealSettings { it.toggle(feature) } },
+                onReset = {
+                    unrealSettings = UnrealProjectSettings()
+                    saveUnrealProjectSettings(context, project, unrealSettings)
+                },
+                onClose = { showUnrealFeatures = false }
+            )
+        }
     }
 }
 
+
+/* =========================================================
+   UNREAL-INSPIRED 50 FEATURES PANEL
+   ========================================================= */
+
+@Composable
+fun UnrealFeaturesDialog(
+    language: String,
+    settings: UnrealProjectSettings,
+    onToggle: (UnrealFeatureType) -> Unit,
+    onReset: () -> Unit,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(text(language, "UNREAL INSPIRED - 50 FEATURES", "50 ميزة مستوحاة من Unreal"), color = Color(0xFF60A5FA)) },
+        text = {
+            Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
+                UnrealFeatureType.values().groupBy { it.category }.forEach { (category, features) ->
+                    Text(category, color = Color(0xFF00E5FF), fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp, bottom = 3.dp))
+                    features.forEach { feature ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 1.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(unrealFeatureDisplayName(feature, language), color = Color.White, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                            Switch(checked = settings.isEnabled(feature), onCheckedChange = { onToggle(feature) })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(text(language, "These are Android/OpenGL-friendly Loco Engine systems inspired by Unreal concepts.", "هذه أنظمة مناسبة لـ Android/OpenGL في Loco Engine ومستوحاة من مفاهيم Unreal."), color = Color.Gray, fontSize = 10.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text(text(language, "DONE", "تم")) } },
+        dismissButton = { TextButton(onClick = onReset) { Text(text(language, "RESET 50", "إعادة ضبط الـ50")) } }
+    )
+}
 
 /* =========================================================
    TOP BAR
@@ -3002,6 +3081,7 @@ fun EditorTopBar(
     canRedo: Boolean,
     onRedo: () -> Unit,
     showSavedIndicator: Boolean,
+    onShowUnrealFeatures: () -> Unit = {},
     onBack: () -> Unit
 ) {
 
@@ -3145,6 +3225,14 @@ fun EditorTopBar(
                 color =
                     Color(0xFF00E5FF)
             )
+
+            TextButton(onClick = onShowUnrealFeatures) {
+                Text(
+                    text = "UE 50",
+                    color = Color(0xFF60A5FA),
+                    fontSize = 11.sp
+                )
+            }
 
             TextButton(
                 onClick = {
@@ -4109,6 +4197,7 @@ fun EditorViewport(
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
     isolateMode: Boolean = false,
+    unrealSettings: UnrealProjectSettings = UnrealProjectSettings(),
     compact: Boolean = false
 ) {
 
@@ -4157,6 +4246,8 @@ fun EditorViewport(
 
                 isolateMode =
                     isolateMode,
+
+                unrealSettings = unrealSettings,
 
                 modifier =
                     Modifier.fillMaxSize()
