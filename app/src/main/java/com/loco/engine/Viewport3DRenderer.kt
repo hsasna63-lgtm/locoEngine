@@ -4,10 +4,25 @@ import android.content.Context
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.Matrix
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Text
 import androidx.compose.ui.viewinterop.AndroidView
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -147,6 +162,10 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
     var lastAppliedFrameAllTrigger = 0
 
+    var lastAppliedLookResetTrigger = 0
+
+    var movementSpeed = 1f
+
     var gridSpacing = 20f
 
     var floorVisible = true
@@ -156,6 +175,9 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
     @Volatile
     var targetY = 0f
+
+    @Volatile
+    var elevation = 0f
 
     @Volatile
     var clearR = 0.06f
@@ -322,17 +344,28 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
         val pitchRad = Math.toRadians(pitchDeg.toDouble())
 
         val eyeX = targetX + (distance * cos(pitchRad) * sin(yawRad)).toFloat()
-        val eyeY = targetY + (distance * sin(pitchRad)).toFloat()
+        val eyeY = targetY + elevation + (distance * sin(pitchRad)).toFloat()
         val eyeZ = (distance * cos(pitchRad) * cos(yawRad)).toFloat()
 
         Matrix.setLookAtM(
             viewMatrix, 0,
             eyeX, eyeY, eyeZ,
-            targetX, targetY, 0f,
+            targetX, targetY + elevation, 0f,
             0f, 1f, 0f
         )
 
         Matrix.multiplyMM(viewProjMatrix, 0, projMatrix, 0, viewMatrix, 0)
+    }
+
+    fun panBy(panDx: Float, panDy: Float) {
+
+        val yawRad = Math.toRadians(yawDeg.toDouble())
+        val cosYaw = cos(yawRad).toFloat()
+        val sinYaw = sin(yawRad).toFloat()
+
+        targetX -= panDx * cosYaw
+        targetY += panDx * sinYaw
+        targetY += panDy * cosYaw
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -465,24 +498,29 @@ fun Viewport3DView(
     resetCameraTrigger: Int = 0,
     recenterPanTrigger: Int = 0,
     frameAllTrigger: Int = 0,
+    lookResetTrigger: Int = 0,
+    movementSpeed: Float = 1f,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
     isolateMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
 
+    val renderer = remember { Viewport3DRenderer() }
+
+    Box(modifier = modifier) {
+
     AndroidView(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
 
         factory = { ctx: Context ->
-
-            val renderer = Viewport3DRenderer()
 
             GLSurfaceView(ctx).apply {
                 setEGLContextClientVersion(2)
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                 tag = renderer
+
 
                 var lastTouchX = 0f
                 var lastTouchY = 0f
@@ -601,6 +639,7 @@ fun Viewport3DView(
                 renderer.yawDeg = 45f
                 renderer.pitchDeg = 30f
                 renderer.distance = 35f
+                renderer.elevation = 0f
                 renderer.lastAppliedResetTrigger = resetCameraTrigger
             }
 
@@ -638,6 +677,14 @@ fun Viewport3DView(
                 renderer.targetY = 0f
             }
 
+            if (renderer.lastAppliedLookResetTrigger != lookResetTrigger) {
+                renderer.yawDeg = 45f
+                renderer.pitchDeg = 30f
+                renderer.lastAppliedLookResetTrigger = lookResetTrigger
+            }
+
+            renderer.movementSpeed = movementSpeed
+
             renderer.renderObjects = objects
                 .filter { it.visible }
                 .filter { !isolateMode || it.id == selectedObjectId }
@@ -658,4 +705,54 @@ fun Viewport3DView(
             }
         }
     )
+
+    val step = 1.2f * movementSpeed
+
+    Column(
+        modifier = Modifier
+            .align(Alignment.BottomStart)
+            .padding(10.dp)
+    ) {
+
+        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+
+            DPadButton("▲") { renderer.panBy(0f, -step) }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+
+            DPadButton("◀") { renderer.panBy(-step, 0f) }
+            DPadButton("⤒") { renderer.elevation = (renderer.elevation + step).coerceIn(-30f, 30f) }
+            DPadButton("▶") { renderer.panBy(step, 0f) }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+
+            Box(modifier = Modifier.width(38.dp))
+            DPadButton("⤓") { renderer.elevation = (renderer.elevation - step).coerceIn(-30f, 30f) }
+            Box(modifier = Modifier.width(38.dp))
+        }
+
+        Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+
+            DPadButton("▼") { renderer.panBy(0f, step) }
+        }
+    }
+    }
+}
+
+@Composable
+private fun DPadButton(label: String, onClick: () -> Unit) {
+
+    Box(
+        modifier = Modifier
+            .width(38.dp)
+            .height(38.dp)
+            .background(Color(0x99101820))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+
+        Text(text = label, color = Color.White, fontSize = 16.sp)
+    }
 }
