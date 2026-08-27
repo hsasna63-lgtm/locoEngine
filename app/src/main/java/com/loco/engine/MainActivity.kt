@@ -1781,6 +1781,16 @@ fun EditorScreen(
             mutableStateOf(0)
         }
 
+    var lookResetTrigger by
+        remember {
+            mutableStateOf(0)
+        }
+
+    var movementSpeed by
+        remember {
+            mutableStateOf(1f)
+        }
+
     var showSavedIndicator by
         remember {
             mutableStateOf(false)
@@ -2799,6 +2809,12 @@ fun EditorScreen(
                     frameAllTrigger =
                         frameAllTrigger,
 
+                    lookResetTrigger =
+                        lookResetTrigger,
+
+                    movementSpeed =
+                        movementSpeed,
+
                     gridSpacing =
                         gridSpacing,
 
@@ -3064,6 +3080,18 @@ fun EditorScreen(
                     onFrameAll = {
                         frameAllTrigger =
                             frameAllTrigger + 1
+                    },
+
+                    onLookReset = {
+                        lookResetTrigger =
+                            lookResetTrigger + 1
+                    },
+
+                    movementSpeed =
+                        movementSpeed,
+
+                    onMovementSpeedChange = {
+                        movementSpeed = it
                     },
 
                     gridSpacing = gridSpacing,
@@ -4357,6 +4385,8 @@ fun EditorViewport(
     resetCameraTrigger: Int = 0,
     recenterPanTrigger: Int = 0,
     frameAllTrigger: Int = 0,
+    lookResetTrigger: Int = 0,
+    movementSpeed: Float = 1f,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
     isolateMode: Boolean = false,
@@ -4402,6 +4432,12 @@ fun EditorViewport(
 
                 frameAllTrigger =
                     frameAllTrigger,
+
+                lookResetTrigger =
+                    lookResetTrigger,
+
+                movementSpeed =
+                    movementSpeed,
 
                 gridSpacing =
                     gridSpacing,
@@ -4681,6 +4717,9 @@ fun InspectorPanel(
     onResetCamera: () -> Unit,
     onRecenterPan: () -> Unit,
     onFrameAll: () -> Unit,
+    onLookReset: () -> Unit,
+    movementSpeed: Float,
+    onMovementSpeedChange: (Float) -> Unit,
     gridSpacing: Float,
     onGridSpacingChange: (Float) -> Unit,
     floorVisible: Boolean,
@@ -4876,6 +4915,33 @@ fun InspectorPanel(
 
             Text(
                 text = text(language, "🗺 Frame All", "🗺 تأطير الكل")
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+
+            OutlinedButton(
+                onClick = onLookReset,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = text(language, "👁 Look Reset", "👁 إعادة النظر")
+                )
+            }
+
+            Text(
+                text = if (movementSpeed > 1f) "🏃 Fast" else "🚶 Slow",
+                color = Color.White,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .clickable {
+                        onMovementSpeedChange(
+                            if (movementSpeed > 1f) 1f else 2.5f
+                        )
+                    }
+                    .padding(8.dp)
             )
         }
 
