@@ -1681,6 +1681,16 @@ fun EditorScreen(
             mutableStateOf("")
         }
 
+    var typeFilter by
+        remember {
+            mutableStateOf("All")
+        }
+
+    var recentlyAddedId by
+        remember {
+            mutableStateOf<Int?>(null)
+        }
+
     var snapEnabled by
         remember {
             mutableStateOf(false)
@@ -1782,6 +1792,11 @@ fun EditorScreen(
         }
 
     var lookResetTrigger by
+        remember {
+            mutableStateOf(0)
+        }
+
+    var focusSelectedTrigger by
         remember {
             mutableStateOf(0)
         }
@@ -2437,6 +2452,14 @@ fun EditorScreen(
         }
     }
 
+    LaunchedEffect(recentlyAddedId) {
+
+        if (recentlyAddedId != null) {
+            kotlinx.coroutines.delay(2500)
+            recentlyAddedId = null
+        }
+    }
+
     BoxWithConstraints(
         modifier =
             Modifier.fillMaxSize()
@@ -2621,6 +2644,16 @@ fun EditorScreen(
                         searchQuery =
                             it
                     },
+
+                    typeFilter =
+                        typeFilter,
+
+                    onTypeFilterChange = {
+                        typeFilter = it
+                    },
+
+                    recentlyAddedId =
+                        recentlyAddedId,
 
                     onToggleVisible = {
                         toggleVisible(it)
@@ -2811,6 +2844,9 @@ fun EditorScreen(
 
                     lookResetTrigger =
                         lookResetTrigger,
+
+                    focusSelectedTrigger =
+                        focusSelectedTrigger,
 
                     movementSpeed =
                         movementSpeed,
@@ -3087,6 +3123,11 @@ fun EditorScreen(
                             lookResetTrigger + 1
                     },
 
+                    onFocusSelected = {
+                        focusSelectedTrigger =
+                            focusSelectedTrigger + 1
+                    },
+
                     movementSpeed =
                         movementSpeed,
 
@@ -3134,6 +3175,9 @@ fun EditorScreen(
                         objectType ->
 
                     pushUndoSnapshot()
+
+                    searchQuery = ""
+                    typeFilter = "All"
 
                     val newId =
                         (
@@ -3196,6 +3240,9 @@ fun EditorScreen(
                     )
 
                     selectedObjectId =
+                        newId
+
+                    recentlyAddedId =
                         newId
 
                     showObjectDialog =
@@ -3724,6 +3771,9 @@ fun SceneTree(
     onAddObject: () -> Unit,
     searchQuery: String,
     onSearchChange: (String) -> Unit,
+    typeFilter: String,
+    onTypeFilterChange: (String) -> Unit,
+    recentlyAddedId: Int?,
     onToggleVisible: (Int) -> Unit,
     onToggleLock: (Int) -> Unit,
     onTogglePin: (Int) -> Unit,
@@ -3846,10 +3896,6 @@ fun SceneTree(
                 Modifier.height(3.dp)
         )
 
-        var typeFilter by remember {
-            mutableStateOf("All")
-        }
-
         var sortAscending by remember {
             mutableStateOf(true)
         }
@@ -3877,7 +3923,7 @@ fun SceneTree(
                     fontSize = 9.sp,
                     color = if (active) Color(0xFF00E5FF) else Color.Gray,
                     modifier = Modifier
-                        .clickable { typeFilter = filterOption }
+                        .clickable { onTypeFilterChange(filterOption) }
                         .padding(3.dp)
                 )
             }
@@ -4063,6 +4109,13 @@ fun SceneTree(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .background(
+                                if (obj.id == recentlyAddedId) {
+                                    Color(0x4022C55E)
+                                } else {
+                                    Color.Transparent
+                                }
+                            )
                             .clickable {
                                 onSelect(
                                     obj.id
@@ -4081,6 +4134,23 @@ fun SceneTree(
                         modifier = Modifier
                             .clickable { onToggleMultiSelect(obj.id) }
                             .padding(end = 3.dp)
+                    )
+
+                    Text(
+                        text = when (obj.type) {
+                            "Cube" -> "⬛"
+                            "Sphere" -> "●"
+                            "Plane" -> "▬"
+                            "Cylinder" -> "🛢"
+                            "Cone" -> "🔺"
+                            "Capsule" -> "💊"
+                            "Empty" -> "◌"
+                            "Camera" -> "📷"
+                            "Light" -> "💡"
+                            else -> "❔"
+                        },
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(end = 2.dp)
                     )
 
                     Box(
@@ -4228,9 +4298,32 @@ fun AddObjectDialog(
             Column(
                 modifier = Modifier
                     .heightIn(max = 380.dp)
-                    .verticalScroll(rememberScrollState())
             ) {
 
+                var objectSearch by remember {
+                    mutableStateOf("")
+                }
+
+                OutlinedTextField(
+                    value = objectSearch,
+                    onValueChange = { objectSearch = it },
+                    label = {
+                        Text(text = text(language, "Search", "بحث"))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
+                ) {
+
+                fun matches(name: String, arabic: String): Boolean {
+                    return objectSearch.isBlank() ||
+                        name.contains(objectSearch, ignoreCase = true) ||
+                        arabic.contains(objectSearch, ignoreCase = true)
+                }
+
+                if (matches("Cube", "مكعب")) {
                 ObjectButton(
                     "Cube",
                     "مكعب",
@@ -4238,7 +4331,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Cube")
                 }
+                }
 
+                if (matches("Sphere", "كرة")) {
                 ObjectButton(
                     "Sphere",
                     "كرة",
@@ -4246,7 +4341,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Sphere")
                 }
+                }
 
+                if (matches("Plane", "مستوٍ")) {
                 ObjectButton(
                     "Plane",
                     "مستوٍ",
@@ -4254,7 +4351,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Plane")
                 }
+                }
 
+                if (matches("Cylinder", "أسطوانة")) {
                 ObjectButton(
                     "Cylinder",
                     "أسطوانة",
@@ -4262,7 +4361,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Cylinder")
                 }
+                }
 
+                if (matches("Cone", "مخروط")) {
                 ObjectButton(
                     "Cone",
                     "مخروط",
@@ -4270,7 +4371,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Cone")
                 }
+                }
 
+                if (matches("Capsule", "كبسولة")) {
                 ObjectButton(
                     "Capsule",
                     "كبسولة",
@@ -4278,7 +4381,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Capsule")
                 }
+                }
 
+                if (matches("Empty", "فارغ")) {
                 ObjectButton(
                     "Empty",
                     "فارغ",
@@ -4286,7 +4391,9 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Empty")
                 }
+                }
 
+                if (matches("Camera", "كاميرا")) {
                 ObjectButton(
                     "Camera",
                     "كاميرا",
@@ -4294,13 +4401,18 @@ fun AddObjectDialog(
                 ) {
                     onAdd("Camera")
                 }
+                }
 
+                if (matches("Light", "ضوء")) {
                 ObjectButton(
                     "Light",
                     "ضوء",
                     language
                 ) {
                     onAdd("Light")
+                }
+                }
+
                 }
             }
         },
@@ -4386,6 +4498,7 @@ fun EditorViewport(
     recenterPanTrigger: Int = 0,
     frameAllTrigger: Int = 0,
     lookResetTrigger: Int = 0,
+    focusSelectedTrigger: Int = 0,
     movementSpeed: Float = 1f,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
@@ -4435,6 +4548,9 @@ fun EditorViewport(
 
                 lookResetTrigger =
                     lookResetTrigger,
+
+                focusSelectedTrigger =
+                    focusSelectedTrigger,
 
                 movementSpeed =
                     movementSpeed,
@@ -4718,6 +4834,7 @@ fun InspectorPanel(
     onRecenterPan: () -> Unit,
     onFrameAll: () -> Unit,
     onLookReset: () -> Unit,
+    onFocusSelected: () -> Unit,
     movementSpeed: Float,
     onMovementSpeedChange: (Float) -> Unit,
     gridSpacing: Float,
@@ -4943,6 +5060,18 @@ fun InspectorPanel(
                     }
                     .padding(8.dp)
             )
+        }
+
+        if (selectedObjectId != null) {
+
+            OutlinedButton(
+                onClick = onFocusSelected,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = text(language, "🎯 Focus Selected", "🎯 توسيط على المحدد")
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
