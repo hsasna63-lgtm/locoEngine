@@ -164,6 +164,12 @@ class Viewport3DRenderer : GLSurfaceView.Renderer {
 
     var lastAppliedLookResetTrigger = 0
 
+    var lastAppliedFocusId: Int? = -999999
+
+    var lastAppliedRecenterTrigger = 0
+
+    var lastAppliedFocusSelectedTrigger = 0
+
     var movementSpeed = 1f
 
     var gridSpacing = 20f
@@ -499,6 +505,7 @@ fun Viewport3DView(
     recenterPanTrigger: Int = 0,
     frameAllTrigger: Int = 0,
     lookResetTrigger: Int = 0,
+    focusSelectedTrigger: Int = 0,
     movementSpeed: Float = 1f,
     gridSpacing: Float = 20f,
     floorVisible: Boolean = true,
@@ -668,13 +675,38 @@ fun Viewport3DView(
                 }
 
                 renderer.lastAppliedFrameAllTrigger = frameAllTrigger
+                renderer.lastAppliedFocusId = selectedObjectId
 
-            } else if (focusedObject != null) {
-                renderer.targetX = focusedObject.x / 40f
-                renderer.targetY = -focusedObject.y / 40f
-            } else {
+            } else if (renderer.lastAppliedRecenterTrigger != recenterPanTrigger) {
+
                 renderer.targetX = 0f
                 renderer.targetY = 0f
+                renderer.elevation = 0f
+                renderer.lastAppliedRecenterTrigger = recenterPanTrigger
+                renderer.lastAppliedFocusId = selectedObjectId
+
+            } else if (renderer.lastAppliedFocusSelectedTrigger != focusSelectedTrigger) {
+
+                if (focusedObject != null) {
+                    renderer.targetX = focusedObject.x / 40f
+                    renderer.targetY = -focusedObject.y / 40f
+                    renderer.elevation = 0f
+                }
+
+                renderer.lastAppliedFocusSelectedTrigger = focusSelectedTrigger
+                renderer.lastAppliedFocusId = selectedObjectId
+
+            } else if (renderer.lastAppliedFocusId != selectedObjectId) {
+
+                if (focusedObject != null) {
+                    renderer.targetX = focusedObject.x / 40f
+                    renderer.targetY = -focusedObject.y / 40f
+                } else {
+                    renderer.targetX = 0f
+                    renderer.targetY = 0f
+                }
+
+                renderer.lastAppliedFocusId = selectedObjectId
             }
 
             if (renderer.lastAppliedLookResetTrigger != lookResetTrigger) {
@@ -706,7 +738,7 @@ fun Viewport3DView(
         }
     )
 
-    val step = 1.2f * movementSpeed
+    val step = (renderer.distance * 0.08f + 0.5f) * movementSpeed
 
     Column(
         modifier = Modifier
@@ -722,14 +754,14 @@ fun Viewport3DView(
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
 
             DPadButton("◀") { renderer.panBy(-step, 0f) }
-            DPadButton("⤒") { renderer.elevation = (renderer.elevation + step).coerceIn(-30f, 30f) }
+            DPadButton("⤒") { renderer.elevation = (renderer.elevation + step).coerceIn(-150f, 150f) }
             DPadButton("▶") { renderer.panBy(step, 0f) }
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
 
             Box(modifier = Modifier.width(38.dp))
-            DPadButton("⤓") { renderer.elevation = (renderer.elevation - step).coerceIn(-30f, 30f) }
+            DPadButton("⤓") { renderer.elevation = (renderer.elevation - step).coerceIn(-150f, 150f) }
             Box(modifier = Modifier.width(38.dp))
         }
 
